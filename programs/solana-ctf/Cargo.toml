@@ -1,0 +1,30 @@
+[package]
+name = "solana_ctf"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "solana_ctf"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.30.1", features = ["metadata", "token_2022"] }
+serde = { version = "1.0", features = ["derive"] }
+spl-token = { version = "4.0.0", features = ["no-entrypoint"] }
+spl-token-2022 = "3.0.2"
+
+[dev-dependencies]
+solana-program-test = "1.10.0"
+solana-sdk = "1.10.0"
+spl-associated-token-account = { version = "^2.0.0" }
+spl-token = "3.4.0"
