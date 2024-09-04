@@ -6,15 +6,18 @@ use anchor_spl::{
 
 declare_id!("EMSsxw9k6kFPp2F4XMdp87q9NwDvAbkMYdRo9BzV1VbP");
 
+pub const USDC_DECIMAL: u64 = 100000;
+pub const ONE_DOLLAR: u64 = USDC_DECIMAL * 10;
+
 #[program]
 pub mod solana_ctf {
     use super::*;
 
     pub fn mint_tokens(ctx: Context<MintTokens>, params: MintTokenParams) -> Result<()> {
-        // Validate that the price is between (0-100)
-        // if params.token_price > 1000000 {
-        //     return Err(BuyTokenError::InvalidPrice.into());
-        // }
+        // Validate that the price is between (0-1 dollar)
+        if params.token_price > ONE_DOLLAR {
+            return Err(BuyTokenError::InvalidPrice.into());
+        }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
         let seeds = &[b"money", bump.as_ref()];
@@ -97,13 +100,13 @@ pub mod solana_ctf {
     }
 
     pub fn burn_tokens(ctx: Context<BurnTokens>, params: BurnTokenParams) -> Result<()> {
-        // Validate that the price is between (0-100)
-        // if params.token_price > 1000000 {
-        //     return Err(SellTokenError::InvalidTokenPrice.into());
-        // }
-        // if params.selling_price > 10000000 {
-        //     return Err(SellTokenError::InvalidSellingPrice.into());
-        // }
+        // Validate that the price is between (0-1 dollar)
+        if params.token_price > ONE_DOLLAR {
+            return Err(SellTokenError::InvalidTokenPrice.into());
+        }
+        if params.selling_price > ONE_DOLLAR {
+            return Err(SellTokenError::InvalidSellingPrice.into());
+        }
 
         /* Debit the USDC from user account to probo account */
         let purchase_price = params.token_price * params.quantity;
