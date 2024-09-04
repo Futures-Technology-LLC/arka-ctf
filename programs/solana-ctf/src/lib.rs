@@ -72,6 +72,10 @@ pub mod solana_ctf {
     }
 
     pub fn initialize_event(ctx: Context<InitializeEvent>, data: InitEventParams) -> Result<()> {
+        if data.commission_rate > 100 {
+            return Err(InitializeEventError::InvalidCommissionRate.into());
+        }
+
         ctx.accounts.event_data.comission_rate = data.commission_rate;
         ctx.accounts.event_data.event_id = data.event_id;
         ctx.accounts.event_data.outcome = EventOutcome::Null;
@@ -277,6 +281,12 @@ pub struct EventData {
 impl EventData {
     pub const MAX_PUBKEYS: u64 = 100;
     pub const LEN: usize = std::mem::size_of::<EventData>();
+}
+
+#[error_code]
+pub enum InitializeEventError {
+    #[msg("Trying to set commission rate > 100")]
+    InvalidCommissionRate,
 }
 
 #[derive(Accounts)]
