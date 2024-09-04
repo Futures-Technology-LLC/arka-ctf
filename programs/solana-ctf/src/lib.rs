@@ -95,7 +95,13 @@ pub mod solana_ctf {
         Ok(())
     }
 
-    pub fn create_mint(_ctx: Context<CreateMintData>, _params: CreateMintParams) -> Result<()> {
+    pub fn create_mint(_ctx: Context<CreateMintData>, params: CreateMintParams) -> Result<()> {
+        msg!(
+            "Creating mint from event_id={:?}, token_type={:?}, token_price={:?}",
+            params.event_id,
+            params.token_type,
+            params.token_price
+        );
         Ok(())
     }
 
