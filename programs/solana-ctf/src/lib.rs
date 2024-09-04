@@ -108,19 +108,24 @@ pub mod solana_ctf {
         /* Debit the USDC from user account to probo account */
         let purchase_price = params.token_price * params.quantity;
         let selling_price = params.selling_price * params.quantity;
-        msg!(
-            "Purchase price: {:?}, Selling Price: {:?}",
-            purchase_price,
-            selling_price
-        );
 
         let mut amount_to_return = selling_price;
+        let mut commission = 0;
 
         // User is making a profit, thus we need to deduct commission
         if selling_price > purchase_price {
-            let commission = ctx.accounts.event_data.comission_rate;
+            let commission_rate = ctx.accounts.event_data.comission_rate;
+            let profit = selling_price - purchase_price;
+            commission = (commission_rate * profit) / 100;
             amount_to_return = selling_price - commission;
         }
+
+        msg!(
+            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?}",
+            purchase_price,
+            selling_price,
+            commission,
+        );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
         let seeds = &[b"money", bump.as_ref()];
