@@ -77,6 +77,12 @@ pub mod solana_ctf {
         ctx.accounts.event_data.outcome = EventOutcome::Null;
         ctx.accounts.event_data.is_outcome_set = false;
 
+        msg!(
+            "Event created on chain with event_id={:?} and commission_rate={:?}",
+            data.event_id,
+            data.commission_rate
+        );
+
         Ok(())
     }
 
