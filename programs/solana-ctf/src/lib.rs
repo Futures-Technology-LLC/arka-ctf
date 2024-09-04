@@ -291,9 +291,9 @@ pub struct InitializeEvent<'info> {
 }
 
 // Token initialization params
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, Default)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct MintTokenParams {
-    pub token_type: u8,
+    pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
     pub quantity: u64,
@@ -338,9 +338,9 @@ pub struct MintTokens<'info> {
 }
 
 // Token initialization params
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, Default)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct BurnTokenParams {
-    pub token_type: u8,
+    pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
     pub quantity: u64,
