@@ -6,15 +6,18 @@ use anchor_spl::{
 
 declare_id!("EMSsxw9k6kFPp2F4XMdp87q9NwDvAbkMYdRo9BzV1VbP");
 
+pub const USDC_DECIMAL: u64 = 100000;
+pub const ONE_DOLLAR: u64 = USDC_DECIMAL * 10;
+
 #[program]
 pub mod solana_ctf {
     use super::*;
 
     pub fn mint_tokens(ctx: Context<MintTokens>, params: MintTokenParams) -> Result<()> {
-        // Validate that the price is between (0-100)
-        // if params.token_price > 1000000 {
-        //     return Err(BuyTokenError::InvalidPrice.into());
-        // }
+        // Validate that the price is between (0-1 dollar)
+        if params.token_price > ONE_DOLLAR {
+            return Err(BuyTokenError::InvalidPrice.into());
+        }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
         let seeds = &[b"money", bump.as_ref()];
@@ -69,10 +72,20 @@ pub mod solana_ctf {
     }
 
     pub fn initialize_event(ctx: Context<InitializeEvent>, data: InitEventParams) -> Result<()> {
+        if data.commission_rate > 100 {
+            return Err(InitializeEventError::InvalidCommissionRate.into());
+        }
+
         ctx.accounts.event_data.comission_rate = data.commission_rate;
         ctx.accounts.event_data.event_id = data.event_id;
         ctx.accounts.event_data.outcome = EventOutcome::Null;
         ctx.accounts.event_data.is_outcome_set = false;
+
+        msg!(
+            "Event created on chain with event_id={:?} and commission_rate={:?}",
+            data.event_id,
+            data.commission_rate
+        );
 
         Ok(())
     }
@@ -92,35 +105,46 @@ pub mod solana_ctf {
         Ok(())
     }
 
-    pub fn create_mint(_ctx: Context<CreateMintData>, _params: CreateMintParams) -> Result<()> {
+    pub fn create_mint(_ctx: Context<CreateMintData>, params: CreateMintParams) -> Result<()> {
+        msg!(
+            "Creating mint from event_id={:?}, token_type={:?}, token_price={:?}",
+            params.event_id,
+            params.token_type,
+            params.token_price
+        );
         Ok(())
     }
 
     pub fn burn_tokens(ctx: Context<BurnTokens>, params: BurnTokenParams) -> Result<()> {
-        // Validate that the price is between (0-100)
-        // if params.token_price > 1000000 {
-        //     return Err(SellTokenError::InvalidTokenPrice.into());
-        // }
-        // if params.selling_price > 10000000 {
-        //     return Err(SellTokenError::InvalidSellingPrice.into());
-        // }
+        // Validate that the price is between (0-1 dollar)
+        if params.token_price > ONE_DOLLAR {
+            return Err(SellTokenError::InvalidTokenPrice.into());
+        }
+        if params.selling_price > ONE_DOLLAR {
+            return Err(SellTokenError::InvalidSellingPrice.into());
+        }
 
         /* Debit the USDC from user account to probo account */
         let purchase_price = params.token_price * params.quantity;
         let selling_price = params.selling_price * params.quantity;
-        msg!(
-            "Purchase price: {:?}, Selling Price: {:?}",
-            purchase_price,
-            selling_price
-        );
 
         let mut amount_to_return = selling_price;
+        let mut commission = 0;
 
         // User is making a profit, thus we need to deduct commission
         if selling_price > purchase_price {
-            let commission = ctx.accounts.event_data.comission_rate;
+            let commission_rate = ctx.accounts.event_data.comission_rate;
+            let profit = selling_price - purchase_price;
+            commission = (commission_rate * profit) / 100;
             amount_to_return = selling_price - commission;
         }
+
+        msg!(
+            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?}",
+            purchase_price,
+            selling_price,
+            commission,
+        );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
         let seeds = &[b"money", bump.as_ref()];
@@ -259,6 +283,12 @@ impl EventData {
     pub const LEN: usize = std::mem::size_of::<EventData>();
 }
 
+#[error_code]
+pub enum InitializeEventError {
+    #[msg("Trying to set commission rate > 100")]
+    InvalidCommissionRate,
+}
+
 #[derive(Accounts)]
 #[instruction(params: InitEventParams)]
 pub struct InitializeEvent<'info> {
@@ -277,9 +307,9 @@ pub struct InitializeEvent<'info> {
 }
 
 // Token initialization params
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, Default)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct MintTokenParams {
-    pub token_type: u8,
+    pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
     pub quantity: u64,
@@ -324,9 +354,9 @@ pub struct MintTokens<'info> {
 }
 
 // Token initialization params
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, Default)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct BurnTokenParams {
-    pub token_type: u8,
+    pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
     pub quantity: u64,
