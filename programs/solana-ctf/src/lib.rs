@@ -91,13 +91,13 @@ pub mod solana_ctf {
         let seeds = &[b"money", bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
-        /* Debit the USDC from user account to probo account */
+        /* Debit the USDC from user account to Arka account */
         let usdc_amount = params.token_price * params.quantity;
         msg!("Total amount of USDC to deduct: {:?}", usdc_amount);
 
         let cpi_accounts = token::Transfer {
             from: ctx.accounts.user_usdc_token_account.to_account_info(),
-            to: ctx.accounts.probo_usdc_token_account.to_account_info(),
+            to: ctx.accounts.arka_usdc_token_account.to_account_info(),
             authority: ctx.accounts.delegate.to_account_info(),
         };
 
@@ -109,7 +109,7 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, usdc_amount)?;
 
-        /* Mint probo token into user account */
+        /* Mint Arka token into user account */
         let event_id = params.event_id.to_le_bytes();
         let token_price = params.token_price.to_le_bytes();
         let seeds = &[
@@ -119,7 +119,7 @@ pub mod solana_ctf {
             &[params.token_type.clone() as u8],
             b"_tp_",
             token_price.as_ref(),
-            &[ctx.bumps.probo_mint],
+            &[ctx.bumps.arka_mint],
         ];
         let signer = [&seeds[..]];
 
@@ -127,9 +127,9 @@ pub mod solana_ctf {
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 MintTo {
-                    authority: ctx.accounts.probo_mint.to_account_info(),
-                    to: ctx.accounts.user_probo_token_account.to_account_info(),
-                    mint: ctx.accounts.probo_mint.to_account_info(),
+                    authority: ctx.accounts.arka_mint.to_account_info(),
+                    to: ctx.accounts.user_arka_token_account.to_account_info(),
+                    mint: ctx.accounts.arka_mint.to_account_info(),
                 },
                 &signer,
             ),
@@ -192,7 +192,7 @@ pub mod solana_ctf {
             return Err(SellTokenError::InvalidSellingPrice.into());
         }
 
-        /* Debit the USDC from user account to probo account */
+        /* Debit the USDC from user account to Arka account */
         let purchase_price = params.token_price * params.quantity;
         let selling_price = params.selling_price * params.quantity;
 
@@ -221,7 +221,7 @@ pub mod solana_ctf {
         // let program_pda = Pubkey::from_str("EMSsxw9k6kFPp2F4XMdp87q9NwDvAbkMYdRo9BzV1VbP");
         let cpi_accounts = token::Transfer {
             to: ctx.accounts.user_usdc_token_account.to_account_info(),
-            from: ctx.accounts.probo_usdc_token_account.to_account_info(),
+            from: ctx.accounts.arka_usdc_token_account.to_account_info(),
             authority: ctx.accounts.delegate.to_account_info(),
         };
 
@@ -233,10 +233,10 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, amount_to_return)?;
 
-        /* Burn probo token from user account */
+        /* Burn Arka token from user account */
         let cpi_accounts = token::Burn {
-            mint: ctx.accounts.probo_mint.to_account_info(),
-            from: ctx.accounts.user_probo_token_account.to_account_info(),
+            mint: ctx.accounts.arka_mint.to_account_info(),
+            from: ctx.accounts.user_arka_token_account.to_account_info(),
             authority: ctx.accounts.authority.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
@@ -398,22 +398,22 @@ pub struct MintTokens<'info> {
         mut,
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
-        mint::authority = probo_mint,
+        mint::authority = arka_mint,
     )]
-    pub probo_mint: Account<'info, Mint>,
+    pub arka_mint: Account<'info, Mint>,
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
         payer = payer,
-        token::mint = probo_mint,
+        token::mint = arka_mint,
         token::authority = payer,
     )]
-    pub user_probo_token_account: Account<'info, TokenAccount>,
+    pub user_arka_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub probo_usdc_token_account: Account<'info, TokenAccount>,
+    pub arka_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
@@ -445,22 +445,22 @@ pub struct BurnTokens<'info> {
         mut,
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
-        mint::authority = probo_mint,
+        mint::authority = arka_mint,
     )]
-    pub probo_mint: Account<'info, Mint>,
+    pub arka_mint: Account<'info, Mint>,
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
         payer = payer,
-        token::mint = probo_mint,
+        token::mint = arka_mint,
         token::authority = payer,
     )]
-    pub user_probo_token_account: Account<'info, TokenAccount>,
+    pub user_arka_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub probo_usdc_token_account: Account<'info, TokenAccount>,
+    pub arka_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut, signer)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
