@@ -131,7 +131,7 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         Pubkey::from_str("5TiXaoC1n5h1aSMoyYDnZrsxGC3VFhEvHZvcTYCGVg4E").unwrap();
     let user_usdc_token_account =
         Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap(); //get_associated_token_address(&payer.pubkey(), &usdc_mint_pubkey);
-    let probo_usdc_token_account =
+    let arka_usdc_token_account =
         Pubkey::from_str("9FQ6qkx9jh3FALxGz4P14tLbepPDZQhUN3fgDccgzL5e").unwrap();
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
     println!("Delegate: {}", delegate_account);
@@ -141,9 +141,8 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         event_id: 3221,
         quantity: 1,
         user_id: 213,
-        user_pubkey: Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap(),
     };
-    let (probo_mint_pda, probo_mint_bumps) = Pubkey::find_program_address(
+    let (arka_mint_pda, arka_mint_bumps) = Pubkey::find_program_address(
         &[
             b"eid_",
             mint_data.event_id.to_le_bytes().as_ref(),
@@ -168,21 +167,20 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         b"_tp_",
         tp.as_ref(),
     ];
-    let (user_probo_token_account_pda, bumps) =
-        Pubkey::find_program_address(user_seed, &program_id);
+    let (user_arka_token_account_pda, bumps) = Pubkey::find_program_address(user_seed, &program_id);
     // let user_probo_token_account_pda =
     //     get_associated_token_address(&payer.pubkey(), &probo_mint_pda);
 
     println!(
         "user: {:?} bumps: {:?} seed: {:?} prob_mint: {:?}",
-        user_probo_token_account_pda, probo_mint_bumps, user_seed, probo_mint_pda
+        user_arka_token_account_pda, arka_mint_bumps, user_seed, arka_mint_pda
     );
 
     let context = accounts::MintTokens {
-        probo_mint: probo_mint_pda,
-        user_probo_token_account: user_probo_token_account_pda,
+        arka_mint: arka_mint_pda,
+        user_arka_token_account: user_arka_token_account_pda,
         user_usdc_token_account,
-        probo_usdc_token_account,
+        arka_usdc_token_account,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -205,13 +203,13 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
     let usdc_mint_pubkey =
         Pubkey::from_str("5TiXaoC1n5h1aSMoyYDnZrsxGC3VFhEvHZvcTYCGVg4E").unwrap();
     let user_usdc_token_account = get_associated_token_address(&payer.pubkey(), &usdc_mint_pubkey);
-    let probo_usdc_token_account =
+    let arka_usdc_token_account =
         Pubkey::from_str("C3jFyfw78Pir9iQsHuHxeCRFLFrZmQQz5BrfJJS8DD8d").unwrap();
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
     println!(
-        "user_usdc: {:?}, probo_usdc: {:?}",
-        user_usdc_token_account, probo_usdc_token_account
+        "user_usdc: {:?}, arka_usdc: {:?}",
+        user_usdc_token_account, arka_usdc_token_account
     );
 
     let burn_data = solana_ctf::BurnTokenParams {
@@ -222,7 +220,7 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
         user_id: 213,
         selling_price: 41,
     };
-    let (probo_mint_pda, probo_mint_bumps) = Pubkey::find_program_address(
+    let (arka_mint_pda, arka_mint_bumps) = Pubkey::find_program_address(
         &[
             b"eid_",
             burn_data.event_id.to_le_bytes().as_ref(),
@@ -247,24 +245,21 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
         b"_tp_",
         tp.as_ref(),
     ];
-    let (user_probo_token_account_pda, bumps) =
-        Pubkey::find_program_address(user_seed, &program_id);
-    // let user_probo_token_account_pda =
-    //     get_associated_token_address(&payer.pubkey(), &probo_mint_pda);
+    let (user_arka_token_account_pda, bumps) = Pubkey::find_program_address(user_seed, &program_id);
 
     let (event_data_pda, _) =
         Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
 
     println!(
         "user: {:?} bumps: {:?} seed: {:?} prob_mint: {:?}",
-        user_probo_token_account_pda, probo_mint_bumps, user_seed, probo_mint_pda
+        user_arka_token_account_pda, arka_mint_bumps, user_seed, arka_mint_pda
     );
 
     let context = accounts::BurnTokens {
-        probo_mint: probo_mint_pda,
-        user_probo_token_account: user_probo_token_account_pda,
+        arka_mint: arka_mint_pda,
+        user_arka_token_account: user_arka_token_account_pda,
         user_usdc_token_account,
-        probo_usdc_token_account,
+        arka_usdc_token_account,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
