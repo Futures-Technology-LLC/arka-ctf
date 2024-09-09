@@ -3,8 +3,9 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, mint_to, Mint, MintTo, Token, TokenAccount},
 };
+use std::slice::Iter;
 
-declare_id!("EMSsxw9k6kFPp2F4XMdp87q9NwDvAbkMYdRo9BzV1VbP");
+declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
 
 pub const USDC_DECIMAL: u64 = 100000;
 pub const ONE_DOLLAR: u64 = USDC_DECIMAL * 10;
@@ -266,6 +267,13 @@ pub enum SellTokenError {
 pub enum TokenType {
     Yes = 0,
     No,
+}
+
+impl TokenType {
+    pub fn iterator() -> Iter<'static, TokenType> {
+        static TOKEN_TYPES: [TokenType; 2] = [TokenType::Yes, TokenType::No];
+        TOKEN_TYPES.iter()
+    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
