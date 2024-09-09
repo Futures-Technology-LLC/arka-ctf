@@ -389,7 +389,6 @@ pub struct MintTokenParams {
     pub event_id: u64,
     pub quantity: u64,
     pub user_id: u64,
-    pub user_pubkey: Pubkey,
 }
 
 #[derive(Accounts)]
