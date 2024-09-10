@@ -13,6 +13,73 @@ pub const ONE_DOLLAR: u64 = USDC_DECIMAL * 10;
 pub mod solana_ctf {
     use super::*;
 
+    pub fn settle_balance(ctx: Context<SettleBalance>, params: SettleBalanceParams) -> Result<()> {
+        if !ctx.accounts.event_data.is_outcome_set {
+            return Err(SettleBalanceError::EventNotFinished.into());
+        }
+
+        let mut selling_price = ONE_DOLLAR;
+        let outcome = ctx.accounts.event_data.outcome.clone() as u8 - 1;
+        if outcome != params.token_type as u8 {
+            selling_price = 0;
+        }
+
+        /* Debit the USDC from user account to probo account */
+        let purchase_price = params.token_price * params.quantity;
+        let selling_price = selling_price * params.quantity;
+
+        let mut amount_to_return = selling_price;
+        let mut commission = 0;
+
+        // User is making a profit, thus we need to deduct commission
+        if selling_price > purchase_price {
+            let commission_rate = ctx.accounts.event_data.comission_rate;
+            let profit = selling_price - purchase_price;
+            commission = (commission_rate * profit) / 100;
+            amount_to_return = selling_price - commission;
+        }
+
+        msg!(
+            "Purchase price: {:?}, Settlement Price: {:?}, commission: {:?}",
+            purchase_price,
+            selling_price,
+            commission,
+        );
+
+        let bump = ctx.bumps.delegate.to_be_bytes();
+        let seeds = &[b"money", bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        if selling_price > 0 {
+            let cpi_accounts = token::Transfer {
+                to: ctx.accounts.user_usdc_token_account.to_account_info(),
+                from: ctx.accounts.arka_usdc_token_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
+
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
+
+            token::transfer(cpi_context, amount_to_return)?;
+        }
+
+        /* Burn probo token from user account */
+        let cpi_accounts = token::Burn {
+            mint: ctx.accounts.arka_mint.to_account_info(),
+            from: ctx.accounts.user_arka_token_account.to_account_info(),
+            authority: ctx.accounts.authority.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+
+        token::burn(cpi_ctx, params.quantity)?;
+
+        Ok(())
+    }
+
     pub fn mint_tokens(ctx: Context<MintTokens>, params: MintTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         if params.token_price > ONE_DOLLAR {
@@ -387,6 +454,58 @@ pub struct BurnTokens<'info> {
     pub user_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub probo_usdc_token_account: Account<'info, TokenAccount>,
+    #[account(mut, signer)]
+    pub payer: Signer<'info>,
+    pub rent: Sysvar<'info, Rent>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    #[account(seeds = [b"money"], bump)]
+    pub delegate: AccountInfo<'info>,
+    #[account(signer)]
+    pub authority: Signer<'info>,
+    pub event_data: Account<'info, EventData>,
+}
+
+#[error_code]
+pub enum SettleBalanceError {
+    #[msg("Event has no outcome set yet!")]
+    EventNotFinished,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct SettleBalanceParams {
+    pub token_type: TokenType,
+    pub token_price: u64,
+    pub event_id: u64,
+    pub quantity: u64,
+    pub user_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: SettleBalanceParams)]
+pub struct SettleBalance<'info> {
+    #[account(
+        mut,
+        seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
+        bump,
+        mint::authority = arka_mint,
+    )]
+    pub arka_mint: Account<'info, Mint>,
+    #[account(
+        init_if_needed,
+        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = arka_mint,
+        token::authority = payer,
+    )]
+    pub user_arka_token_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub user_usdc_token_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub arka_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut, signer)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
