@@ -297,6 +297,10 @@ async fn buy_token(
         user_id,
     };
 
+    let event_id = data.event_id.to_le_bytes();
+    let (event_data_pda, _) =
+        Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
     let (mint_pda, _) = Pubkey::find_program_address(
         &[
             b"eid_",
@@ -338,6 +342,7 @@ async fn buy_token(
         associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
+        event_data: event_data_pda,
     };
 
     let ix = solana_ctf::instruction::MintTokens { params: data };

@@ -7,16 +7,14 @@ use std::slice::Iter;
 
 declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
 
-pub const USDC_DECIMAL: u64 = 100000;
-pub const ONE_DOLLAR: u64 = USDC_DECIMAL * 10;
-
 #[program]
 pub mod solana_ctf {
     use super::*;
 
     pub fn mint_tokens(ctx: Context<MintTokens>, params: MintTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
-        if params.token_price > ONE_DOLLAR {
+        let event_total_price = ctx.accounts.event_data.event_total_price;
+        if params.token_price > event_total_price {
             return Err(BuyTokenError::InvalidPrice.into());
         }
 
@@ -376,6 +374,7 @@ pub struct MintTokens<'info> {
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(seeds = [b"money"], bump)]
     pub delegate: AccountInfo<'info>,
+    pub event_data: Account<'info, EventData>,
 }
 
 // Token initialization params
