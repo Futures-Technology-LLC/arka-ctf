@@ -77,8 +77,12 @@ fn create_event(payer: &Keypair, program: &Program<&Keypair>, program_id: &Pubke
         .unwrap();
 }
 
-fn create_mint(payer: &Keypair, program: &Program<&Keypair>, program_id: &Pubkey, params: solana_ctf::CreateMintParams) {
-
+fn create_mint(
+    payer: &Keypair,
+    program: &Program<&Keypair>,
+    program_id: &Pubkey,
+    params: solana_ctf::CreateMintParams,
+) {
     let (minting_pda, _) = Pubkey::find_program_address(
         &[
             b"eid_",
@@ -102,15 +106,13 @@ fn create_mint(payer: &Keypair, program: &Program<&Keypair>, program_id: &Pubkey
     program
         .request()
         .accounts(mint_context)
-        .args(instruction::CreateMint { _params: params })
+        .args(instruction::CreateMint { params })
         .signer(&payer)
         .send()
         .unwrap();
 }
 
 fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: &Pubkey) {
-
-
     // let x = {
     //     probo_mint: 9Ma2ccKCPKdCZ1GhVP2TvZwLR9UFfBCQsiyecpkgsBK3,
     //     user_probo_token_account: 2TRVLrzSAPehWbcRyuuLWVF51MJwTYgvfhxKGmqXog19,
@@ -127,25 +129,26 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
 
     let usdc_mint_pubkey =
         Pubkey::from_str("5TiXaoC1n5h1aSMoyYDnZrsxGC3VFhEvHZvcTYCGVg4E").unwrap();
-    let user_usdc_token_account = Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap();//get_associated_token_address(&payer.pubkey(), &usdc_mint_pubkey);
+    let user_usdc_token_account =
+        Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap(); //get_associated_token_address(&payer.pubkey(), &usdc_mint_pubkey);
     let probo_usdc_token_account =
         Pubkey::from_str("9FQ6qkx9jh3FALxGz4P14tLbepPDZQhUN3fgDccgzL5e").unwrap();
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
-    println!("Delegate: {}", delegate_account );
+    println!("Delegate: {}", delegate_account);
     let mint_data = MintTokenParams {
-        token_type: 0,
+        token_type: solana_ctf::TokenType::Yes,
         token_price: 31,
         event_id: 3221,
         quantity: 1,
         user_id: 213,
-        user_pubkey:  Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap(),
+        user_pubkey: Pubkey::from_str("4YRevpgzSR2oixxDJvySzZk6sYbryxQcaNywNHesv9EY").unwrap(),
     };
     let (probo_mint_pda, probo_mint_bumps) = Pubkey::find_program_address(
         &[
             b"eid_",
             mint_data.event_id.to_le_bytes().as_ref(),
             b"_tt_",
-            &[mint_data.token_type],
+            &[mint_data.token_type.clone() as u8],
             b"_tp_",
             mint_data.token_price.to_le_bytes().as_ref(),
         ],
@@ -161,7 +164,7 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         b"_eid_",
         event_id.as_ref(),
         b"_tt_",
-        &[mint_data.token_type],
+        &[mint_data.token_type.clone() as u8],
         b"_tp_",
         tp.as_ref(),
     ];
@@ -212,7 +215,7 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
     );
 
     let burn_data = solana_ctf::BurnTokenParams {
-        token_type: 0,
+        token_type: solana_ctf::TokenType::Yes,
         token_price: 31,
         event_id: 3221,
         quantity: 1,
@@ -224,7 +227,7 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
             b"eid_",
             burn_data.event_id.to_le_bytes().as_ref(),
             b"_tt_",
-            &[burn_data.token_type],
+            &[burn_data.token_type.clone() as u8],
             b"_tp_",
             burn_data.token_price.to_le_bytes().as_ref(),
         ],
@@ -240,7 +243,7 @@ fn sell_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id:
         b"_eid_",
         event_id.as_ref(),
         b"_tt_",
-        &[burn_data.token_type],
+        &[burn_data.token_type.clone() as u8],
         b"_tp_",
         tp.as_ref(),
     ];
@@ -353,26 +356,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // sell_token_workflow(&payer, &program, &program_id);
     // buy_token_workflow(&payer, &program, &program_id);
     //  create_event(&payer, &program, &program_id);
-    //create_mint(payer, program, program_id, 
-       
+    //create_mint(payer, program, program_id,
+
     for i in 0..10 {
-        create_mint(&payer, &program, &program_id, 
-            solana_ctf::CreateMintParams{
-               event_id: 3,
-               token_type: solana_ctf::TokenType::Yes,
-               token_price: i*100,
-               mint_authority: payer.pubkey(),
-            }
+        create_mint(
+            &payer,
+            &program,
+            &program_id,
+            solana_ctf::CreateMintParams {
+                event_id: 3,
+                token_type: solana_ctf::TokenType::Yes,
+                token_price: i * 100,
+                mint_authority: payer.pubkey(),
+            },
         );
-        create_mint(&payer, &program, &program_id, 
-            solana_ctf::CreateMintParams{
-               event_id: 3,
-               token_type: solana_ctf::TokenType::No,
-               token_price: i*100,
-               mint_authority: payer.pubkey(),
-            }
+        create_mint(
+            &payer,
+            &program,
+            &program_id,
+            solana_ctf::CreateMintParams {
+                event_id: 3,
+                token_type: solana_ctf::TokenType::No,
+                token_price: i * 100,
+                mint_authority: payer.pubkey(),
+            },
         );
     }
-    
+
     Ok(())
 }
