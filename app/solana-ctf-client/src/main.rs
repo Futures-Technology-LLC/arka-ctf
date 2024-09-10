@@ -58,6 +58,7 @@ fn create_event(payer: &Keypair, program: &Program<&Keypair>, program_id: &Pubke
     let params = solana_ctf::InitEventParams {
         event_id: 1,
         commission_rate: 1,
+        event_total_price: 1000_000,
     };
     let event_id = params.event_id.to_le_bytes();
     let (event_data_pda, _) =
@@ -154,6 +155,10 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         program_id,
     );
 
+    let event_id = mint_data.event_id.to_le_bytes();
+    let (event_data_pda, _) =
+        Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
     let user_id = mint_data.user_id.to_le_bytes();
     let event_id = mint_data.event_id.to_le_bytes();
     let tp = mint_data.token_price.to_le_bytes();
@@ -188,6 +193,7 @@ fn buy_token_workflow(payer: &Keypair, program: &Program<&Keypair>, program_id: 
         associated_token_program: spl_associated_token_account::id(),
         authority: payer.pubkey(),
         delegate: delegate_account,
+        event_data: event_data_pda,
     };
 
     program

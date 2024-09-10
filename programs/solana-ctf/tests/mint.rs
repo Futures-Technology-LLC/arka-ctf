@@ -177,12 +177,14 @@ async fn initialize_event(
     payer: &Keypair,
     event_id: u64,
     commission_rate: u64,
+    event_total_price: u64,
     program_id: &Pubkey,
     recent_blockhash: Hash,
 ) {
     let data = solana_ctf::InitEventParams {
         event_id,
         commission_rate,
+        event_total_price,
     };
     let event_id = data.event_id.to_le_bytes();
     let (event_data_pda, _) =
@@ -295,6 +297,10 @@ async fn buy_token(
         user_id,
     };
 
+    let event_id = data.event_id.to_le_bytes();
+    let (event_data_pda, _) =
+        Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
     let (mint_pda, _) = Pubkey::find_program_address(
         &[
             b"eid_",
@@ -336,6 +342,7 @@ async fn buy_token(
         associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
+        event_data: event_data_pda,
     };
 
     let ix = solana_ctf::instruction::MintTokens { params: data };
@@ -406,6 +413,7 @@ async fn test_program() {
         &payer,
         1,
         10,
+        1000_000,
         &program_id,
         recent_blockhash,
     )
