@@ -177,12 +177,14 @@ async fn initialize_event(
     payer: &Keypair,
     event_id: u64,
     commission_rate: u64,
+    event_total_price: u64,
     program_id: &Pubkey,
     recent_blockhash: Hash,
 ) {
     let data = solana_ctf::InitEventParams {
         event_id,
         commission_rate,
+        event_total_price,
     };
     let event_id = data.event_id.to_le_bytes();
     let (event_data_pda, _) =
@@ -406,6 +408,7 @@ async fn test_program() {
         &payer,
         1,
         10,
+        1000_000,
         &program_id,
         recent_blockhash,
     )

@@ -81,10 +81,12 @@ pub mod solana_ctf {
         ctx.accounts.event_data.event_id = data.event_id;
         ctx.accounts.event_data.outcome = EventOutcome::Null;
         ctx.accounts.event_data.is_outcome_set = false;
+        ctx.accounts.event_data.event_total_price = data.event_total_price;
 
         msg!(
-            "Event created on chain with event_id={:?} and commission_rate={:?}",
+            "Event created on chain with event_id={:?}, event_price={:?} and commission_rate={:?}",
             data.event_id,
+            data.event_total_price,
             data.commission_rate
         );
 
@@ -118,11 +120,12 @@ pub mod solana_ctf {
 
     pub fn burn_tokens(ctx: Context<BurnTokens>, params: BurnTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
-        if params.token_price > ONE_DOLLAR {
+        let event_total_price = ctx.accounts.event_data.event_total_price;
+        if params.token_price > event_total_price {
             return Err(SellTokenError::InvalidTokenPrice.into());
         }
 
-        if params.selling_price == ONE_DOLLAR {
+        if params.selling_price == event_total_price {
             if !ctx.accounts.event_data.is_outcome_set {
                 return Err(SellTokenError::EventNotFinished.into());
             }
@@ -281,6 +284,7 @@ pub enum UpdateOutcomeError {
 pub struct InitEventParams {
     pub event_id: u64,
     pub commission_rate: u64,
+    pub event_total_price: u64,
 }
 
 #[repr(u8)]
@@ -298,10 +302,10 @@ pub struct EventData {
     pub comission_rate: u64,
     pub outcome: EventOutcome,
     pub is_outcome_set: bool,
+    pub event_total_price: u64,
 }
 
 impl EventData {
-    pub const MAX_PUBKEYS: u64 = 100;
     pub const LEN: usize = std::mem::size_of::<EventData>();
 }
 
