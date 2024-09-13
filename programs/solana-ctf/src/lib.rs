@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use std::slice::Iter;
 
-declare_id!("EzNLH2CVhiiT8nE8KTPaPQPMHYsFVayFdK5pHAKkUaiB");
+declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
 
 #[program]
 pub mod solana_ctf {
@@ -95,6 +95,12 @@ pub mod solana_ctf {
         if data == EventOutcome::Null {
             return Err(UpdateOutcomeError::InvalidOutcomeState.into());
         }
+
+        msg!(
+            "event_id={:?} event_outcome={:?}",
+            ctx.accounts.event_data.event_id,
+            ctx.accounts.event_data.outcome
+        );
 
         if ctx.accounts.event_data.is_outcome_set {
             return Err(UpdateOutcomeError::OutcomeAlreadyUpdated.into());
@@ -256,8 +262,8 @@ pub struct CreateMintData<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateOutcome<'info> {
-    pub event_data: Account<'info, EventData>,
     #[account(mut)]
+    pub event_data: Account<'info, EventData>,
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
