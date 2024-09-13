@@ -4940,6 +4940,7 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "serde",
  "solana-program-test",
  "solana-sdk",
  "spl-associated-token-account 2.3.0",
