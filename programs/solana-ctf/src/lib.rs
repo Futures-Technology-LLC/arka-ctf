@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use std::slice::Iter;
 
-declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
+declare_id!("EzNLH2CVhiiT8nE8KTPaPQPMHYsFVayFdK5pHAKkUaiB");
 
 #[program]
 pub mod solana_ctf {
@@ -211,7 +211,9 @@ pub enum SellTokenError {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, Clone, AnchorSerialize, AnchorDeserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, AnchorSerialize, AnchorDeserialize, serde::Deserialize, Copy,
+)]
 pub enum TokenType {
     Yes = 0,
     No,
@@ -292,6 +294,17 @@ pub enum EventOutcome {
     Null = 0,
     Yes,
     No,
+}
+
+impl From<u8> for EventOutcome {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => EventOutcome::Null,
+            1 => EventOutcome::Yes,
+            2 => EventOutcome::No,
+            _ => EventOutcome::Null, // Default case if value doesn't match
+        }
+    }
 }
 
 #[account]
@@ -378,7 +391,7 @@ pub struct MintTokens<'info> {
 }
 
 // Token initialization params
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
 pub struct BurnTokenParams {
     pub token_type: TokenType,
     pub token_price: u64,
