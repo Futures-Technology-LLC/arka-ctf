@@ -1,5 +1,5 @@
 [workspace]
-members = ["app/solana-ctf-client", "programs/*"]
+members = ["programs/*"]
 resolver = "2"
 
 [profile.release]
