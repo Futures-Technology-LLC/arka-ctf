@@ -98,6 +98,32 @@ async fn get_usdc_account(bank_client: &mut BanksClient, user_usdc_ata: &Pubkey)
     token_account
 }
 
+async fn mint_usdc(
+    bank_client: &mut BanksClient,
+    usdc_mint: &UsdcMint,
+    payer: &Keypair,
+    usdc_ata: &Pubkey,
+    recent_blockhash: Hash,
+) {
+    let mint = &usdc_mint.mint;
+    let mint_to_ix = mint_to(
+        &spl_token::id(),                   // Program ID
+        &mint.pubkey(),                     // Mint
+        &usdc_ata,                          // User's token account
+        &usdc_mint.mint_authority.pubkey(), // Mint authority
+        &[],                                // No multisig signers
+        1_000_000_000,                      // Amount to mint (e.g., 1000 tokens with 9 decimals)
+    )
+    .unwrap();
+
+    // Create and sign the transaction
+    let mut transaction = Transaction::new_with_payer(&[mint_to_ix], Some(&payer.pubkey()));
+    transaction.sign(&[&payer, &usdc_mint.mint_authority], recent_blockhash);
+
+    // Process the transaction
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
 async fn create_user_and_mint_usdc(
     bank_client: &mut BanksClient,
     usdc_mint: &UsdcMint,
@@ -150,9 +176,12 @@ async fn get_approval(
     user: &User,
     amount: u64,
     recent_blockhash: Hash,
+    event_id: u64,
 ) {
     let usdc_token_account = &user.user_usdc_ata;
-    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
+    let event_id_bytes = event_id.to_le_bytes();
+    let (delegate_account, _) =
+        Pubkey::find_program_address(&[b"usdc_eid_", event_id_bytes.as_ref()], &program_id);
     let owner = &user.user_key.pubkey();
 
     let ix = approve(
@@ -180,6 +209,7 @@ async fn initialize_event(
     event_total_price: u64,
     program_id: &Pubkey,
     recent_blockhash: Hash,
+    usdc_mint: &UsdcMint,
 ) {
     let data = solana_ctf::InitEventParams {
         event_id,
@@ -189,10 +219,20 @@ async fn initialize_event(
     let event_id = data.event_id.to_le_bytes();
     let (event_data_pda, _) =
         Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
+    let (escrow_pda, _) =
+        Pubkey::find_program_address(&[b"usdc_eid_", event_id.as_ref()], program_id);
+
     let event_account = solana_ctf::accounts::InitializeEvent {
         event_data: event_data_pda,
         payer: payer.pubkey(),
+        rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
+        token_program: TOKEN_PROGRAM_ID,
+        associated_token_program: spl_associated_token_account::id(),
+        usdc_mint: usdc_mint.mint.pubkey(),
+        escrow_account: escrow_pda,
+        delegate: escrow_pda,
     };
     let ix = solana_ctf::instruction::InitializeEvent { data };
 
@@ -287,7 +327,7 @@ async fn buy_token(
     user_id: u64,
     quantity: u64,
     user: &User,
-    arka_usdc: &User,
+    arka_usdc_ata: &Pubkey,
 ) {
     let data = solana_ctf::MintTokenParams {
         token_type,
@@ -328,13 +368,14 @@ async fn buy_token(
     ];
 
     let (user_arka_token_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
-    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
+    let (delegate_account, _) =
+        Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
 
     let accounts = solana_ctf::accounts::MintTokens {
         arka_mint: mint_pda,
         user_arka_token_account: user_arka_token_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
-        arka_usdc_token_account: arka_usdc.user_usdc_ata.clone(),
+        arka_usdc_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -363,25 +404,143 @@ async fn buy_token(
     bank_client.process_transaction(transaction).await.unwrap();
 }
 
+async fn sell_token(
+    bank_client: &mut BanksClient,
+    payer: &Keypair,
+    event_id: u64,
+    program_id: &Pubkey,
+    recent_blockhash: Hash,
+    mint_authority: &Pubkey,
+    token_type: solana_ctf::TokenType,
+    token_price: u64,
+    user_id: u64,
+    quantity: u64,
+    user: &User,
+    arka_event_usdc_ata: &Pubkey,
+    arka_usdc_ata: &Pubkey,
+    selling_price: u64,
+) {
+    let data = solana_ctf::BurnTokenParams {
+        token_type,
+        token_price,
+        event_id,
+        quantity,
+        user_id,
+        selling_price,
+    };
+
+    let event_id = data.event_id.to_le_bytes();
+    let (event_data_pda, _) =
+        Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
+    let (mint_pda, _) = Pubkey::find_program_address(
+        &[
+            b"eid_",
+            data.event_id.to_le_bytes().as_ref(),
+            b"_tt_",
+            &[data.token_type.clone() as u8],
+            b"_tp_",
+            data.token_price.to_le_bytes().as_ref(),
+        ],
+        &program_id,
+    );
+
+    let uid = data.user_id.to_le_bytes();
+    let eid = data.event_id.to_le_bytes();
+    let tp = data.token_price.to_le_bytes();
+    let user_seed = &[
+        b"uid_",
+        uid.as_ref(),
+        b"_eid_",
+        eid.as_ref(),
+        b"_tt_",
+        &[data.token_type.clone() as u8],
+        b"_tp_",
+        tp.as_ref(),
+    ];
+
+    let (user_arka_token_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
+    let (delegate_account, _) =
+        Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
+
+    let accounts = solana_ctf::accounts::BurnTokens {
+        arka_mint: mint_pda,
+        user_arka_token_account: user_arka_token_account_pda,
+        user_usdc_token_account: user.user_usdc_ata.clone(),
+        arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
+        arka_usdc_token_account: arka_usdc_ata.clone(),
+        payer: payer.pubkey(),
+        rent: SYSVAR_RENT_PUBKEY,
+        system_program: system_program::id(),
+        token_program: TOKEN_PROGRAM_ID,
+        associated_token_program: spl_associated_token_account::id(),
+        authority: mint_authority.clone(),
+        delegate: delegate_account,
+        event_data: event_data_pda,
+    };
+
+    let ix = solana_ctf::instruction::BurnTokens { params: data };
+
+    let buy_token_ix = Instruction {
+        program_id: program_id.clone(),
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+
+    let mut transaction = Transaction::new_with_payer(
+        &[buy_token_ix],       // Include the instruction
+        Some(&payer.pubkey()), // Specify the fee payer
+    );
+
+    transaction.sign(&[&payer], recent_blockhash);
+
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
 #[tokio::test]
 async fn test_program() {
-    let program_id = Pubkey::from_str("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA").unwrap();
+    let program_id = Pubkey::from_str("EEvREcEYzAV31rNmw2QGJHQw54Gbc39vov2fbfCFf7PF").unwrap();
     let program_test = ProgramTest::new("solana_ctf", program_id, None);
     let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
     let usdc_mint = create_usdc_mint(&mut banks_client, &payer, recent_blockhash).await;
 
-    let arka_usdc_account =
-        create_user_and_mint_usdc(&mut banks_client, &usdc_mint, &payer, recent_blockhash).await;
-    get_approval(
+    println!("USDC mint pubkey={:?}", usdc_mint.mint.pubkey());
+
+    let event_id: u64 = 1;
+    let event_id_bytes = event_id.to_le_bytes();
+
+    initialize_event(
         &mut banks_client,
-        &program_id,
         &payer,
-        &arka_usdc_account,
-        100,
+        event_id,
+        10,
+        1000_000,
+        &program_id,
+        recent_blockhash,
+        &usdc_mint,
+    )
+    .await;
+
+    let (arka_event_usdc_account_ata, _) =
+        Pubkey::find_program_address(&[b"usdc_eid_", event_id_bytes.as_ref()], &program_id);
+
+    println!("arka_usdc_ata: {:?}", arka_event_usdc_account_ata);
+
+    get_usdc_account(&mut banks_client, &arka_event_usdc_account_ata).await;
+
+    mint_usdc(
+        &mut banks_client,
+        &usdc_mint,
+        &payer,
+        &arka_event_usdc_account_ata,
         recent_blockhash,
     )
     .await;
-    get_usdc_account(&mut banks_client, &arka_usdc_account.user_usdc_ata).await;
+
+    get_usdc_account(&mut banks_client, &arka_event_usdc_account_ata).await;
+
+    let arka_usdc_account =
+        create_user_and_mint_usdc(&mut banks_client, &usdc_mint, &payer, recent_blockhash).await;
 
     let user1 =
         create_user_and_mint_usdc(&mut banks_client, &usdc_mint, &payer, recent_blockhash).await;
@@ -392,6 +551,7 @@ async fn test_program() {
         &user1,
         900000,
         recent_blockhash,
+        1,
     )
     .await;
     get_usdc_account(&mut banks_client, &user1.user_usdc_ata).await;
@@ -405,19 +565,10 @@ async fn test_program() {
         &user2,
         100,
         recent_blockhash,
+        1,
     )
     .await;
     get_usdc_account(&mut banks_client, &user2.user_usdc_ata).await;
-    initialize_event(
-        &mut banks_client,
-        &payer,
-        1,
-        10,
-        1000_000,
-        &program_id,
-        recent_blockhash,
-    )
-    .await;
 
     create_mints(
         &mut banks_client,
@@ -442,11 +593,34 @@ async fn test_program() {
         1,
         3,
         &user1,
-        &arka_usdc_account,
+        &arka_event_usdc_account_ata,
     )
     .await;
 
     get_usdc_account(&mut banks_client, &user1.user_usdc_ata).await;
+    get_usdc_account(&mut banks_client, &arka_event_usdc_account_ata).await;
+
+    sell_token(
+        &mut banks_client,
+        &payer,
+        1,
+        &program_id,
+        recent_blockhash,
+        &payer.pubkey(),
+        solana_ctf::TokenType::Yes,
+        300000,
+        1,
+        3,
+        &user1,
+        &arka_event_usdc_account_ata,
+        &arka_usdc_account.user_usdc_ata,
+        500000,
+    )
+    .await;
+
+    get_usdc_account(&mut banks_client, &user1.user_usdc_ata).await;
+    get_usdc_account(&mut banks_client, &arka_event_usdc_account_ata).await;
     get_usdc_account(&mut banks_client, &arka_usdc_account.user_usdc_ata).await;
+
     assert!(false);
 }
