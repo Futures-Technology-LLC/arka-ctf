@@ -3,6 +3,7 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, mint_to, Mint, MintTo, Token, TokenAccount},
 };
+use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
 
 declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
@@ -19,7 +20,8 @@ pub mod solana_ctf {
         }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
-        let seeds = &[b"money", bump.as_ref()];
+        let event_id_bytes = params.event_id.to_le_bytes();
+        let seeds = &[b"usdc_eid_", event_id_bytes.as_ref(), bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
         /* Debit the USDC from user account to Arka account */
@@ -87,6 +89,24 @@ pub mod solana_ctf {
             data.event_total_price,
             data.commission_rate
         );
+
+        let bump = ctx.bumps.escrow_account.to_be_bytes();
+        let event_id_bytes = data.event_id.to_le_bytes();
+        let seeds = &[b"usdc_eid_", event_id_bytes.as_ref(), bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        token::set_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::SetAuthority {
+                    account_or_mint: ctx.accounts.escrow_account.to_account_info(),
+                    current_authority: ctx.accounts.delegate.to_account_info(),
+                },
+                &signer_seeds,
+            ),
+            AuthorityType::AccountOwner,
+            Some(ctx.accounts.delegate.key()), // Set the PDA as the new owner
+        )?;
 
         Ok(())
     }
@@ -163,14 +183,15 @@ pub mod solana_ctf {
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
-        let seeds = &[b"money", bump.as_ref()];
+        let event_id = params.event_id.to_le_bytes();
+        let seeds = &[b"usdc_eid_", event_id.as_ref(), bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
         if params.selling_price > 0 {
             // let program_pda = Pubkey::from_str("EMSsxw9k6kFPp2F4XMdp87q9NwDvAbkMYdRo9BzV1VbP");
             let cpi_accounts = token::Transfer {
                 to: ctx.accounts.user_usdc_token_account.to_account_info(),
-                from: ctx.accounts.arka_usdc_token_account.to_account_info(),
+                from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
                 authority: ctx.accounts.delegate.to_account_info(),
             };
 
@@ -181,6 +202,20 @@ pub mod solana_ctf {
             );
 
             token::transfer(cpi_context, amount_to_return)?;
+
+            let cpi_accounts = token::Transfer {
+                to: ctx.accounts.arka_usdc_token_account.to_account_info(),
+                from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
+
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
+
+            token::transfer(cpi_context, commission)?;
         }
 
         /* Burn Arka token from user account */
@@ -344,9 +379,28 @@ pub struct InitializeEvent<'info> {
         bump
     )]
     pub event_data: Account<'info, EventData>,
+    pub usdc_mint: Account<'info, Mint>,
+    #[account(
+        init,
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = usdc_mint,
+        token::authority = delegate,
+    )]
+    pub escrow_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    pub delegate: AccountInfo<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 // Token initialization params
@@ -391,7 +445,10 @@ pub struct MintTokens<'info> {
     #[account(signer)]
     pub authority: Signer<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
-    #[account(seeds = [b"money"], bump)]
+    #[account(
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+    )]
     pub delegate: AccountInfo<'info>,
     pub event_data: Account<'info, EventData>,
 }
@@ -428,6 +485,12 @@ pub struct BurnTokens<'info> {
     pub user_arka_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub arka_usdc_event_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub arka_usdc_token_account: Account<'info, TokenAccount>,
     #[account(mut, signer)]
@@ -437,7 +500,10 @@ pub struct BurnTokens<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
-    #[account(seeds = [b"money"], bump)]
+    #[account(
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+    )]
     pub delegate: AccountInfo<'info>,
     #[account(signer)]
     pub authority: Signer<'info>,
