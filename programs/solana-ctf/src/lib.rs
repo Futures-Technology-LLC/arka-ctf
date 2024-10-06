@@ -116,18 +116,18 @@ pub mod solana_ctf {
             return Err(UpdateOutcomeError::InvalidOutcomeState.into());
         }
 
-        msg!(
-            "event_id={:?} event_outcome={:?}",
-            ctx.accounts.event_data.event_id,
-            ctx.accounts.event_data.outcome
-        );
-
         if ctx.accounts.event_data.is_outcome_set {
             return Err(UpdateOutcomeError::OutcomeAlreadyUpdated.into());
         }
 
         ctx.accounts.event_data.outcome = data;
         ctx.accounts.event_data.is_outcome_set = true;
+
+        msg!(
+            "Updating for event_id={:?} event_outcome={:?}",
+            ctx.accounts.event_data.event_id,
+            ctx.accounts.event_data.outcome
+        );
 
         Ok(())
     }
