@@ -1,0 +1,41 @@
+name: Anchor Build and Solana Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js (needed for Anchor)
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . $HOME/.cargo/env
+
+      - name: Install Solana CLI
+        run: |
+          curl -sSfL https://release.solana.com/v1.10.32/install | sh
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          echo "export PATH=$PATH" >> $GITHUB_ENV
+          
+      - name: Install Anchor CLI
+        run: |
+          npm install -g @project-serum/anchor-cli
+
+      - name: Anchor Build
+        run: anchor build
+
+      - name: Deploy Solana Program
+        run: |
+          solana program deploy target/deploy/solana_ctf.so --program-id EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA
