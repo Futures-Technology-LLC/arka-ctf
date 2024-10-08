@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - utkarsh/github-workflow
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Install Rust
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo 'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"' >> $GITHUB_ENV
+
+
+      - name: Install AVM
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked
+          source $HOME/.cargo/env
+
+      - name: Install Anchor version 0.30.1
+        run: |
+          avm install 0.30.1
+          avm use 0.30.1
+
+
+      - name: Configure Solana and Build
+        run: |
+          solana config set --url https://api.devnet.solana.com
+          anchor build
