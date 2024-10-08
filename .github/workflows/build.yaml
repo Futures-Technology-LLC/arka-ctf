@@ -5,7 +5,7 @@ on:
     branches:
       - utkarsh/github-workflow
 
-      
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,6 +41,7 @@ jobs:
             879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
             bash -c "
               # Configure Solana
+              export PATH="/root/.local/share/solana/install/active_release/bin:$PATH"
               solana config set --url https://api.devnet.solana.com && \
               anchor build
             "
