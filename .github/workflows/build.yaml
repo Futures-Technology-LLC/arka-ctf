@@ -38,7 +38,7 @@ jobs:
         run: |
           mkdir -p ./app
           echo "${{ secrets.FEE_PAIR_KEY }}" > ./app/fee-payer-keypair.json
-          chmod 600 ./app/fee-pair-keypair.json
+          chmod 600 ./app/fee-payer-keypair.json
 
       # Step 6: Run the Docker container and configure Solana and Anchor
       - name: Run container and build
