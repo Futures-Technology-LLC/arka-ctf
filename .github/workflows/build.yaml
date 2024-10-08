@@ -49,6 +49,7 @@ jobs:
             bash -c "
               # Configure Solana
               source /root/.bashrc && \
+              cd /root/app && \  
               solana config set --url https://api.devnet.solana.com && \
               solana config set --keypair /root/app/fee-payer-keypair.json && \
               anchor build
