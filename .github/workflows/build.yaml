@@ -36,19 +36,20 @@ jobs:
       # Step 5: Copy Keypair from GitHub Secret
       - name: Create fee-pair.keyjson from GitHub secret
         run: |
-          mkdir -p /usr/src/app
-          echo "${{ secrets.FEE_PAIR_KEY }}" > /usr/src/app/fee-payer-keypair.json
+          mkdir -p ./app
+          echo "${{ secrets.FEE_PAIR_KEY }}" > ./app/fee-payer-keypair.json
+          chmod 600 ./app/fee-pair-keypair.json
 
       # Step 6: Run the Docker container and configure Solana and Anchor
       - name: Run container and build
         run: |
           docker run --rm \
-            -v $(pwd):/usr/src/app \
+            -v $(pwd):/root/app \
             879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
             bash -c "
               # Configure Solana
               source /root/.bashrc && \
               solana config set --url https://api.devnet.solana.com && \
-              solana config set --keypair /usr/src/app/fee-payer-keypair.json && \
+              solana config set --keypair /root/app/fee-payer-keypair.json && \
               anchor build
             "
