@@ -27,6 +27,12 @@ jobs:
           echo 'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"' >> $GITHUB_ENV
           source $GITHUB_ENV
 
+      - name: Verify Solana Installation
+        run: |
+            source $GITHUB_ENV
+            echo "Current PATH: $PATH"
+            solana --version  # This will fail if Solana is not found
+
       - name: Install AVM
         run: |
           cargo install --git https://github.com/coral-xyz/anchor --tag v0.30.1 anchor-cli
