@@ -41,7 +41,7 @@ jobs:
             879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
             bash -c "
               # Configure Solana
-              export PATH="/root/.local/share/solana/install/active_release/bin:$PATH"
+              export PATH="/root/.local/share/solana/install/active_release/bin:/root/.cargo/bin:$PATH"
               solana config set --url https://api.devnet.solana.com && \
-              anchor build
+              anchor --version
             "
