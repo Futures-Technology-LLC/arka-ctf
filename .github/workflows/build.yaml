@@ -14,40 +14,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Step 2: Install Rust
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $GITHUB_ENV
+      # Step 2: Configure AWS CLI
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: AKIA4ZPZVQTYONJGQ4AW
+          aws-secret-access-key: S3onnT6o42kQnFv8Hk3gFCFy8TdPunhcOG6gZPCy
+          aws-region: ap-south-1 # e.g., us-west-2
 
-      # Step 3: Load Rust environment
-      - name: Load Rust environment
+      # Step 3: Log in to Amazon ECR
+      - name: Login to ECR
         run: |
-          source $GITHUB_ENV
-          rustc --version # Verify Rust installation
+          aws ecr get-login-password --region your-aws-region | docker login --username AWS --password-stdin 879381284080.dkr.ecr.your-aws-region.amazonaws.com
 
-      # Step 4: Install Solana CLI
-      - name: Install Solana CLI
+      # Step 4: Pull the Docker image from ECR
+      - name: Pull Docker image
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
-          echo 'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"' >> $GITHUB_ENV
+          docker pull 879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest
 
-      # Step 5: Load Solana environment
-      - name: Load Solana environment
+      # Step 6: Run the Docker container and configure Solana and Anchor
+      - name: Run container and build
         run: |
-          source $GITHUB_ENV
-          echo "Current PATH: $PATH"
-          solana --version # Verify Solana installation
-
-      # Step 6: Install AVM
-      - name: Install AVM
-        run: |
-          cargo install --git https://github.com/coral-xyz/anchor --tag v0.30.1 anchor-cli
-          echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $GITHUB_ENV
-
-      # Step 7: Configure Solana and Build
-      - name: Configure Solana and Build
-        run: |
-          source $GITHUB_ENV
-          solana config set --url https://api.devnet.solana.com
-          anchor build
+          docker run --rm \
+            -v $(pwd):/usr/src/app \
+            879381284080.dkr.ecr.your-aws-region.amazonaws.com/rust-ctf:latest \
+            bash -c "
+              # Configure Solana
+              solana config set --url https://api.devnet.solana.com && \
+              anchor build
+            "
