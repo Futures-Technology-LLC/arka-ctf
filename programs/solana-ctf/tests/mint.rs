@@ -176,12 +176,9 @@ async fn get_approval(
     user: &User,
     amount: u64,
     recent_blockhash: Hash,
-    event_id: u64,
 ) {
     let usdc_token_account = &user.user_usdc_ata;
-    let event_id_bytes = event_id.to_le_bytes();
-    let (delegate_account, _) =
-        Pubkey::find_program_address(&[b"usdc_eid_", event_id_bytes.as_ref()], &program_id);
+    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
     let owner = &user.user_key.pubkey();
 
     let ix = approve(
@@ -368,14 +365,13 @@ async fn buy_token(
     ];
 
     let (user_arka_token_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
-    let (delegate_account, _) =
-        Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
+    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
     let accounts = solana_ctf::accounts::MintTokens {
         arka_mint: mint_pda,
         user_arka_token_account: user_arka_token_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
-        arka_usdc_token_account: arka_usdc_ata.clone(),
+        arka_usdc_event_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -551,7 +547,6 @@ async fn test_program() {
         &user1,
         900000,
         recent_blockhash,
-        1,
     )
     .await;
     get_usdc_account(&mut banks_client, &user1.user_usdc_ata).await;
@@ -565,7 +560,6 @@ async fn test_program() {
         &user2,
         100,
         recent_blockhash,
-        1,
     )
     .await;
     get_usdc_account(&mut banks_client, &user2.user_usdc_ata).await;

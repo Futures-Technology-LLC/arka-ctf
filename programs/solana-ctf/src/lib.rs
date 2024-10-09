@@ -20,8 +20,7 @@ pub mod solana_ctf {
         }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
-        let event_id_bytes = params.event_id.to_le_bytes();
-        let seeds = &[b"usdc_eid_", event_id_bytes.as_ref(), bump.as_ref()];
+        let seeds = &[b"money", bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
         /* Debit the USDC from user account to Arka account */
@@ -30,7 +29,7 @@ pub mod solana_ctf {
 
         let cpi_accounts = token::Transfer {
             from: ctx.accounts.user_usdc_token_account.to_account_info(),
-            to: ctx.accounts.arka_usdc_token_account.to_account_info(),
+            to: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
             authority: ctx.accounts.delegate.to_account_info(),
         };
 
@@ -434,8 +433,12 @@ pub struct MintTokens<'info> {
     pub user_arka_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub arka_usdc_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub arka_usdc_event_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
@@ -445,10 +448,7 @@ pub struct MintTokens<'info> {
     #[account(signer)]
     pub authority: Signer<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
-    #[account(
-        seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
-        bump,
-    )]
+    #[account(seeds = [b"money"], bump)]
     pub delegate: AccountInfo<'info>,
     pub event_data: Account<'info, EventData>,
 }
