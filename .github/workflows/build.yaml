@@ -46,7 +46,6 @@ jobs:
       - name: Run container and build
         run: |
           docker run --rm \
-          --user $(id -u):$(id -g) \ 
             -v $(pwd):/root/app \
             879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
             bash -c "
