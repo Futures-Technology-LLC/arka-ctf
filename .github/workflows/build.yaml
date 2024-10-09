@@ -37,8 +37,8 @@ jobs:
       - name: Create fee-pair.keyjson from GitHub secret
         run: |
           mkdir -p ./app
-          echo "${{ secrets.FEE_PAIR_KEY }}" > ./app/fee-payer-keypair.json
-          chmod 600 ./app/fee-payer-keypair.json
+          echo "${{ secrets.FEE_PAIR_KEY }}" > ./fee-payer-keypair.json
+          chmod 600 ./fee-payer-keypair.json
 
            
 
@@ -46,6 +46,7 @@ jobs:
       - name: Run container and build
         run: |
           docker run --rm \
+          --user $(id -u):$(id -g) \ 
             -v $(pwd):/root/app \
             879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
             bash -c "
@@ -53,7 +54,7 @@ jobs:
               source /root/.bashrc && \
               cd /root/app && \  
               solana config set --url https://api.devnet.solana.com && \
-              solana config set --keypair /root/app/fee-payer-keypair.json && \
+              solana config set --keypair fee-payer-keypair.json && \
               solana-keygen pubkey ./fee-payer-keypair.json && \
               anchor build && \
               solana program deploy target/deploy/solana_ctf.so --program-id EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA
