@@ -40,10 +40,8 @@ jobs:
           echo "${{ secrets.FEE_PAIR_KEY }}" > ./app/fee-payer-keypair.json
           chmod 600 ./app/fee-payer-keypair.json
 
-      - name: Verify Keypair
-        run: |
-            solana-keygen pubkey /root/app/fee-payer-keypair.json
-            
+           
+
       # Step 6: Run the Docker container and configure Solana and Anchor
       - name: Run container and build
         run: |
@@ -56,6 +54,7 @@ jobs:
               cd /root/app && \  
               solana config set --url https://api.devnet.solana.com && \
               solana config set --keypair /root/app/fee-payer-keypair.json && \
+              solana-keygen pubkey /root/app/fee-payer-keypair.json && \
               anchor build && \
               solana program deploy target/deploy/solana_ctf.so --program-id EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA
             "
