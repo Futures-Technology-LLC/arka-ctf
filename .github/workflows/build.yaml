@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - utkarsh/github-workflow
+      - master
 
 
 jobs:
@@ -11,29 +11,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Step 2: Configure AWS CLI
       - name: Set up AWS CLI
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: AKIA4ZPZVQTYONJGQ4AW
           aws-secret-access-key: S3onnT6o42kQnFv8Hk3gFCFy8TdPunhcOG6gZPCy
-          aws-region: ap-south-1 # e.g., us-west-2
+          aws-region: ap-south-1 
 
-      # Step 3: Log in to Amazon ECR
       - name: Login to ECR
         run: |
           aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 879381284080.dkr.ecr.ap-south-1.amazonaws.com
 
-      # Step 4: Pull the Docker image from ECR
       - name: Pull Docker image
         run: |
           docker pull 879381284080.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest
 
-      # Step 5: Copy Keypair from GitHub Secret
       - name: Create fee-pair.keyjson from GitHub secret
         run: |
           mkdir -p ./app
@@ -42,7 +37,6 @@ jobs:
 
            
 
-      # Step 6: Run the Docker container and configure Solana and Anchor
       - name: Run container and build
         run: |
           docker run --rm \
