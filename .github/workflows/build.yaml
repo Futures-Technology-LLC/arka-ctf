@@ -52,5 +52,6 @@ jobs:
               cd /root/app && \  
               solana config set --url https://api.devnet.solana.com && \
               solana config set --keypair /root/app/fee-payer-keypair.json && \
-              anchor build
+              anchor build && \
+              solana program deploy target/deploy/solana_ctf.so --program-id EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA
             "
