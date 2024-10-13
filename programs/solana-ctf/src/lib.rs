@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{self, mint_to, Mint, MintTo, Token, TokenAccount},
+    token::{self, Mint as OldMint, Token as OldToken, TokenAccount as OldTokenAccount},
+    token_interface::{burn, mint_to, Burn, Mint, MintTo, Token2022, TokenAccount},
 };
 use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
@@ -34,7 +35,7 @@ pub mod solana_ctf {
         };
 
         let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.old_token_program.to_account_info(),
             cpi_accounts,
             &signer_seeds,
         );
@@ -195,7 +196,7 @@ pub mod solana_ctf {
             };
 
             let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.old_token_program.to_account_info(),
                 cpi_accounts,
                 &signer_seeds,
             );
@@ -209,7 +210,7 @@ pub mod solana_ctf {
             };
 
             let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.old_token_program.to_account_info(),
                 cpi_accounts,
                 &signer_seeds,
             );
@@ -218,7 +219,7 @@ pub mod solana_ctf {
         }
 
         /* Burn Arka token from user account */
-        let cpi_accounts = token::Burn {
+        let cpi_accounts = Burn {
             mint: ctx.accounts.arka_mint.to_account_info(),
             from: ctx.accounts.user_arka_token_account.to_account_info(),
             authority: ctx.accounts.authority.to_account_info(),
@@ -226,7 +227,7 @@ pub mod solana_ctf {
         let cpi_program = ctx.accounts.token_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
 
-        token::burn(cpi_ctx, params.quantity)?;
+        burn(cpi_ctx, params.quantity)?;
 
         Ok(())
     }
@@ -285,13 +286,14 @@ pub struct CreateMintData<'info> {
         bump,
         mint::decimals = 0,
         mint::authority = mint,
+        extensions::close_authority::authority = payer,
     )]
-    pub mint: Account<'info, Mint>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Program<'info, Token2022>,
 }
 
 #[derive(Accounts)]
@@ -378,7 +380,7 @@ pub struct InitializeEvent<'info> {
         bump
     )]
     pub event_data: Account<'info, EventData>,
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: Account<'info, OldMint>,
     #[account(
         init,
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
@@ -387,7 +389,7 @@ pub struct InitializeEvent<'info> {
         token::mint = usdc_mint,
         token::authority = delegate,
     )]
-    pub escrow_account: Account<'info, TokenAccount>,
+    pub escrow_account: Account<'info, OldTokenAccount>,
     #[account(
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
         bump,
@@ -398,7 +400,7 @@ pub struct InitializeEvent<'info> {
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Program<'info, OldToken>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
@@ -420,8 +422,9 @@ pub struct MintTokens<'info> {
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
         mint::authority = arka_mint,
+        extensions::close_authority::authority = payer,
     )]
-    pub arka_mint: Account<'info, Mint>,
+    pub arka_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
@@ -430,20 +433,21 @@ pub struct MintTokens<'info> {
         token::mint = arka_mint,
         token::authority = payer,
     )]
-    pub user_arka_token_account: Account<'info, TokenAccount>,
+    pub user_arka_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub user_usdc_token_account: Account<'info, TokenAccount>,
+    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub arka_usdc_event_token_account: Account<'info, TokenAccount>,
+    pub arka_usdc_event_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Program<'info, Token2022>,
+    pub old_token_program: Program<'info, OldToken>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     #[account(signer)]
     pub authority: Signer<'info>,
@@ -472,8 +476,9 @@ pub struct BurnTokens<'info> {
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
         bump,
         mint::authority = arka_mint,
+        extensions::close_authority::authority = payer,
     )]
-    pub arka_mint: Account<'info, Mint>,
+    pub arka_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
@@ -482,22 +487,23 @@ pub struct BurnTokens<'info> {
         token::mint = arka_mint,
         token::authority = payer,
     )]
-    pub user_arka_token_account: Account<'info, TokenAccount>,
+    pub user_arka_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub user_usdc_token_account: Account<'info, TokenAccount>,
+    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub arka_usdc_event_token_account: Account<'info, TokenAccount>,
+    pub arka_usdc_event_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub arka_usdc_token_account: Account<'info, TokenAccount>,
+    pub arka_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, signer)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Program<'info, Token2022>,
+    pub old_token_program: Program<'info, OldToken>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(

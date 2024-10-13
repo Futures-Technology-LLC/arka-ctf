@@ -3,7 +3,8 @@ use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_lang::InstructionData;
 use anchor_spl::token::TokenAccount;
-use anchor_spl::token::ID as TOKEN_PROGRAM_ID;
+use anchor_spl::token::ID as OLD_TOKEN_PROGRAM_ID;
+use anchor_spl::token_2022::ID as TOKEN_PROGRAM_ID;
 use solana_program_test::*;
 use solana_sdk::hash::Hash;
 use solana_sdk::program_pack::Pack;
@@ -17,8 +18,8 @@ use solana_sdk::{
 };
 use spl_associated_token_account::get_associated_token_address;
 use spl_token::instruction::approve;
-use spl_token::instruction::initialize_mint;
-use spl_token::instruction::mint_to;
+use spl_token_2022::instruction::initialize_mint;
+use spl_token_2022::instruction::mint_to;
 
 pub const ONE_DOLLAR: u64 = 1_000_000;
 
@@ -225,7 +226,7 @@ async fn initialize_event(
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
-        token_program: TOKEN_PROGRAM_ID,
+        token_program: OLD_TOKEN_PROGRAM_ID,
         associated_token_program: spl_associated_token_account::id(),
         usdc_mint: usdc_mint.mint.pubkey(),
         escrow_account: escrow_pda,
@@ -258,10 +259,10 @@ async fn create_mints(
     tick_size: u64,
     mint_authority: &Pubkey,
 ) {
-    let mut create_mints_ix = vec![];
     let mut start = tick_size;
 
     while start < ONE_DOLLAR {
+        let mut create_mints_ix = vec![];
         for token_type in solana_ctf::TokenType::iterator() {
             let data = solana_ctf::CreateMintParams {
                 event_id,
@@ -299,17 +300,16 @@ async fn create_mints(
 
             create_mints_ix.push(create_mint_ix.clone());
         }
+        let mut transaction = Transaction::new_with_payer(
+            &create_mints_ix,      // Include the instruction
+            Some(&payer.pubkey()), // Specify the fee payer
+        );
+
+        transaction.sign(&[&payer], recent_blockhash);
+
+        bank_client.process_transaction(transaction).await.unwrap();
         start += tick_size;
     }
-
-    let mut transaction = Transaction::new_with_payer(
-        &create_mints_ix,      // Include the instruction
-        Some(&payer.pubkey()), // Specify the fee payer
-    );
-
-    transaction.sign(&[&payer], recent_blockhash);
-
-    bank_client.process_transaction(transaction).await.unwrap();
 }
 
 async fn buy_token(
@@ -376,6 +376,7 @@ async fn buy_token(
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
         token_program: TOKEN_PROGRAM_ID,
+        old_token_program: OLD_TOKEN_PROGRAM_ID,
         associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
@@ -469,6 +470,7 @@ async fn sell_token(
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
         token_program: TOKEN_PROGRAM_ID,
+        old_token_program: OLD_TOKEN_PROGRAM_ID,
         associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
