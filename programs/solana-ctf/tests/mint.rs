@@ -34,6 +34,40 @@ pub struct User {
     pub user_usdc_ata: Pubkey,
 }
 
+async fn close_event_account(
+    bank_client: &mut BanksClient,
+    payer: &Keypair,
+    recent_blockhash: Hash,
+    program_id: &Pubkey,
+    event_id: u64,
+) {
+    let data = solana_ctf::CloseEventAccountParams { event_id };
+    let event_id = event_id.to_le_bytes();
+    let (event_data_pda, _) =
+        Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
+
+    let event_account = solana_ctf::accounts::CloseEventAccount {
+        event_data: event_data_pda,
+        payer: payer.pubkey(),
+    };
+    let ix = solana_ctf::instruction::CloseEventData { params: data };
+
+    let create_event_ix = Instruction {
+        program_id: program_id.clone(),
+        accounts: event_account.to_account_metas(None),
+        data: ix.data(),
+    };
+
+    let mut transaction = Transaction::new_with_payer(
+        &[create_event_ix],    // Include the instruction
+        Some(&payer.pubkey()), // Specify the fee payer
+    );
+
+    transaction.sign(&[&payer], recent_blockhash);
+
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
 async fn create_usdc_mint(
     bank_client: &mut BanksClient,
     payer: &Keypair,
@@ -617,6 +651,22 @@ async fn test_program() {
     get_usdc_account(&mut banks_client, &user1.user_usdc_ata).await;
     get_usdc_account(&mut banks_client, &arka_event_usdc_account_ata).await;
     get_usdc_account(&mut banks_client, &arka_usdc_account.user_usdc_ata).await;
+
+    let balance = banks_client
+        .get_balance(payer.pubkey().clone())
+        .await
+        .unwrap();
+
+    println!("Balance before closing {:?}", balance);
+
+    close_event_account(&mut banks_client, &payer, recent_blockhash, &program_id, 1).await;
+
+    let balance = banks_client
+        .get_balance(payer.pubkey().clone())
+        .await
+        .unwrap();
+
+    println!("Balance after closing {:?}", balance);
 
     assert!(false);
 }
