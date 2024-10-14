@@ -142,6 +142,14 @@ pub mod solana_ctf {
         Ok(())
     }
 
+    pub fn close_event_data(
+        _ctx: Context<CloseEventAccount>,
+        params: CloseEventAccountParams,
+    ) -> Result<()> {
+        msg!("Closing event account with event_id={:?}", params.event_id);
+        Ok(())
+    }
+
     pub fn burn_tokens(ctx: Context<BurnTokens>, params: BurnTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let event_total_price = ctx.accounts.event_data.event_total_price;
@@ -377,7 +385,7 @@ pub struct InitializeEvent<'info> {
         payer = payer,
         space = 8 + EventData::LEN,
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref()],
-        bump
+        bump,
     )]
     pub event_data: Account<'info, EventData>,
     pub usdc_mint: Account<'info, OldMint>,
@@ -514,4 +522,23 @@ pub struct BurnTokens<'info> {
     #[account(signer)]
     pub authority: Signer<'info>,
     pub event_data: Account<'info, EventData>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
+pub struct CloseEventAccountParams {
+    pub event_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: CloseEventAccountParams)]
+pub struct CloseEventAccount<'info> {
+    #[account(
+        mut,
+        seeds = [b"eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+        close = payer,
+    )]
+    pub event_data: Account<'info, EventData>,
+    #[account(signer)]
+    pub payer: Signer<'info>,
 }
