@@ -360,64 +360,40 @@ async fn buy_token(
     user: &User,
     arka_usdc_ata: &Pubkey,
 ) {
-    let data = solana_ctf::MintTokenParams {
+    let data = solana_ctf::BuyTokenParams {
         token_type,
         token_price,
         event_id,
         quantity,
         user_id,
+        commission: 10,
     };
 
     let event_id = data.event_id.to_le_bytes();
     let (event_data_pda, _) =
         Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
 
-    let (mint_pda, _) = Pubkey::find_program_address(
-        &[
-            b"eid_",
-            data.event_id.to_le_bytes().as_ref(),
-            b"_tt_",
-            &[data.token_type.clone() as u8],
-            b"_tp_",
-            data.token_price.to_le_bytes().as_ref(),
-        ],
-        &program_id,
-    );
-
     let uid = data.user_id.to_le_bytes();
     let eid = data.event_id.to_le_bytes();
-    let tp = data.token_price.to_le_bytes();
-    let user_seed = &[
-        b"uid_",
-        uid.as_ref(),
-        b"_eid_",
-        eid.as_ref(),
-        b"_tt_",
-        &[data.token_type.clone() as u8],
-        b"_tp_",
-        tp.as_ref(),
-    ];
+    let user_seed = &[b"uid_", uid.as_ref(), b"_eid_", eid.as_ref()];
 
-    let (user_arka_token_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
+    let (user_arka_event_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
-    let accounts = solana_ctf::accounts::MintTokens {
-        arka_mint: mint_pda,
-        user_arka_token_account: user_arka_token_account_pda,
+    let accounts = solana_ctf::accounts::BuyTokens {
+        user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
         arka_usdc_event_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
-        token_program: TOKEN_PROGRAM_ID,
         old_token_program: OLD_TOKEN_PROGRAM_ID,
-        associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
         event_data: event_data_pda,
     };
 
-    let ix = solana_ctf::instruction::MintTokens { params: data };
+    let ix = solana_ctf::instruction::BuyTokens { params: data };
 
     let buy_token_ix = Instruction {
         program_id: program_id.clone(),
@@ -451,7 +427,7 @@ async fn sell_token(
     arka_usdc_ata: &Pubkey,
     selling_price: u64,
 ) {
-    let data = solana_ctf::BurnTokenParams {
+    let data = solana_ctf::SellTokenParams {
         token_type,
         token_price,
         event_id,
@@ -464,54 +440,29 @@ async fn sell_token(
     let (event_data_pda, _) =
         Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
 
-    let (mint_pda, _) = Pubkey::find_program_address(
-        &[
-            b"eid_",
-            data.event_id.to_le_bytes().as_ref(),
-            b"_tt_",
-            &[data.token_type.clone() as u8],
-            b"_tp_",
-            data.token_price.to_le_bytes().as_ref(),
-        ],
-        &program_id,
-    );
-
     let uid = data.user_id.to_le_bytes();
     let eid = data.event_id.to_le_bytes();
-    let tp = data.token_price.to_le_bytes();
-    let user_seed = &[
-        b"uid_",
-        uid.as_ref(),
-        b"_eid_",
-        eid.as_ref(),
-        b"_tt_",
-        &[data.token_type.clone() as u8],
-        b"_tp_",
-        tp.as_ref(),
-    ];
+    let user_seed = &[b"uid_", uid.as_ref(), b"_eid_", eid.as_ref()];
 
-    let (user_arka_token_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
+    let (user_arka_event_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
     let (delegate_account, _) =
         Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
 
-    let accounts = solana_ctf::accounts::BurnTokens {
-        arka_mint: mint_pda,
-        user_arka_token_account: user_arka_token_account_pda,
+    let accounts = solana_ctf::accounts::SellTokens {
+        user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
         arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
         arka_usdc_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
-        token_program: TOKEN_PROGRAM_ID,
         old_token_program: OLD_TOKEN_PROGRAM_ID,
-        associated_token_program: spl_associated_token_account::id(),
         authority: mint_authority.clone(),
         delegate: delegate_account,
         event_data: event_data_pda,
     };
 
-    let ix = solana_ctf::instruction::BurnTokens { params: data };
+    let ix = solana_ctf::instruction::SellTokens { params: data };
 
     let buy_token_ix = Instruction {
         program_id: program_id.clone(),
@@ -640,7 +591,7 @@ async fn test_program() {
         solana_ctf::TokenType::Yes,
         300000,
         1,
-        3,
+        2,
         &user1,
         &arka_event_usdc_account_ata,
         &arka_usdc_account.user_usdc_ata,
