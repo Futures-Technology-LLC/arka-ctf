@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, Mint as OldMint, Token as OldToken, TokenAccount as OldTokenAccount},
-    token_interface::{burn, mint_to, Burn, Mint, MintTo, Token2022, TokenAccount},
+    token_interface::{Mint, Token2022, TokenAccount},
 };
 use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
@@ -13,7 +13,7 @@ declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
 pub mod solana_ctf {
     use super::*;
 
-    pub fn mint_tokens(ctx: Context<MintTokens>, params: MintTokenParams) -> Result<()> {
+    pub fn buy_tokens(ctx: Context<BuyTokens>, params: BuyTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.token_price > event_total_price {
@@ -43,31 +43,29 @@ pub mod solana_ctf {
         token::transfer(cpi_context, usdc_amount)?;
 
         /* Mint Arka token into user account */
-        let event_id = params.event_id.to_le_bytes();
-        let token_price = params.token_price.to_le_bytes();
-        let seeds = &[
-            b"eid_",
-            event_id.as_ref(),
-            b"_tt_",
-            &[params.token_type.clone() as u8],
-            b"_tp_",
-            token_price.as_ref(),
-            &[ctx.bumps.arka_mint],
-        ];
-        let signer = [&seeds[..]];
+        let quantity = params.quantity;
+        let token_price = params.token_price;
+        let token_type = params.token_type.clone() as usize;
+        let user_event_account = &mut ctx.accounts.user_arka_event_account;
 
-        mint_to(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                MintTo {
-                    authority: ctx.accounts.arka_mint.to_account_info(),
-                    to: ctx.accounts.user_arka_token_account.to_account_info(),
-                    mint: ctx.accounts.arka_mint.to_account_info(),
-                },
-                &signer,
-            ),
-            params.quantity,
-        )?;
+        let current_quantity = user_event_account.total_qty;
+        let current_price = user_event_account.avg_purchase_price;
+
+        let new_price = ((current_price[token_type] * current_quantity[token_type])
+            + (token_price * quantity))
+            / (current_quantity[token_type] + quantity);
+
+        user_event_account.avg_purchase_price[token_type] = new_price;
+        user_event_account.total_qty[token_type] += quantity;
+        user_event_account.comission = params.commission;
+
+        msg!(
+            "Previous avg_price={:?} qty={:?}, New avg_price={:?} qty={:?}",
+            current_price[token_type],
+            current_quantity[token_type],
+            new_price,
+            user_event_account.total_qty[token_type],
+        );
 
         Ok(())
     }
@@ -150,8 +148,9 @@ pub mod solana_ctf {
         Ok(())
     }
 
-    pub fn burn_tokens(ctx: Context<BurnTokens>, params: BurnTokenParams) -> Result<()> {
+    pub fn sell_tokens(ctx: Context<SellTokens>, params: SellTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
+        let token_type = params.token_type as usize;
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.token_price > event_total_price {
             return Err(SellTokenError::InvalidTokenPrice.into());
@@ -168,8 +167,14 @@ pub mod solana_ctf {
             }
         }
 
-        /* Debit the USDC from user account to Arka account */
-        let purchase_price = params.token_price * params.quantity;
+        /* Credit the USDC from user account to Arka account */
+        let avg_purchase_price =
+            ctx.accounts.user_arka_event_account.avg_purchase_price[token_type];
+        let total_qty = ctx.accounts.user_arka_event_account.total_qty[token_type];
+
+        assert!(total_qty >= params.quantity);
+
+        let purchase_price = avg_purchase_price * params.quantity;
         let selling_price = params.selling_price * params.quantity;
 
         let mut amount_to_return = selling_price;
@@ -177,7 +182,7 @@ pub mod solana_ctf {
 
         // User is making a profit, thus we need to deduct commission
         if selling_price > purchase_price {
-            let commission_rate = ctx.accounts.event_data.comission_rate;
+            let commission_rate = ctx.accounts.user_arka_event_account.comission;
             let profit = selling_price - purchase_price;
             commission = (commission_rate * profit) / 100;
             amount_to_return = selling_price - commission;
@@ -226,16 +231,12 @@ pub mod solana_ctf {
             token::transfer(cpi_context, commission)?;
         }
 
-        /* Burn Arka token from user account */
-        let cpi_accounts = Burn {
-            mint: ctx.accounts.arka_mint.to_account_info(),
-            from: ctx.accounts.user_arka_token_account.to_account_info(),
-            authority: ctx.accounts.authority.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-
-        burn(cpi_ctx, params.quantity)?;
+        /* Reduce Arka token quantity from user account */
+        ctx.accounts.user_arka_event_account.total_qty[token_type] -= params.quantity;
+        msg!(
+            "Total quantiy available after this trade={:?}",
+            ctx.accounts.user_arka_event_account.total_qty[token_type]
+        );
 
         Ok(())
     }
@@ -414,34 +415,37 @@ pub struct InitializeEvent<'info> {
 
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
-pub struct MintTokenParams {
+pub struct BuyTokenParams {
     pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
     pub quantity: u64,
     pub user_id: u64,
+    pub commission: u64,
+}
+
+#[account]
+pub struct UserEventData {
+    pub avg_purchase_price: [u64; 2],
+    pub total_qty: [u64; 2],
+    pub comission: u64,
+}
+
+impl UserEventData {
+    pub const LEN: usize = std::mem::size_of::<UserEventData>();
 }
 
 #[derive(Accounts)]
-#[instruction(params: MintTokenParams)]
-pub struct MintTokens<'info> {
-    #[account(
-        mut,
-        seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
-        bump,
-        mint::authority = arka_mint,
-        extensions::close_authority::authority = payer,
-    )]
-    pub arka_mint: Box<InterfaceAccount<'info, Mint>>,
+#[instruction(params: BuyTokenParams)]
+pub struct BuyTokens<'info> {
     #[account(
         init_if_needed,
-        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
+        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
         bump,
         payer = payer,
-        token::mint = arka_mint,
-        token::authority = payer,
+        space = 8 + UserEventData::LEN,
     )]
-    pub user_arka_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_arka_event_account: Account<'info, UserEventData>,
     #[account(mut)]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
@@ -454,9 +458,7 @@ pub struct MintTokens<'info> {
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
     pub old_token_program: Program<'info, OldToken>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     #[account(signer)]
     pub authority: Signer<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
@@ -467,7 +469,7 @@ pub struct MintTokens<'info> {
 
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
-pub struct BurnTokenParams {
+pub struct SellTokenParams {
     pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
@@ -477,25 +479,14 @@ pub struct BurnTokenParams {
 }
 
 #[derive(Accounts)]
-#[instruction(params: BurnTokenParams)]
-pub struct BurnTokens<'info> {
+#[instruction(params: SellTokenParams)]
+pub struct SellTokens<'info> {
     #[account(
         mut,
-        seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
+        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
         bump,
-        mint::authority = arka_mint,
-        extensions::close_authority::authority = payer,
     )]
-    pub arka_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(
-        init_if_needed,
-        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
-        bump,
-        payer = payer,
-        token::mint = arka_mint,
-        token::authority = payer,
-    )]
-    pub user_arka_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_arka_event_account: Account<'info, UserEventData>,
     #[account(mut)]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
@@ -510,9 +501,7 @@ pub struct BurnTokens<'info> {
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
     pub old_token_program: Program<'info, OldToken>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
