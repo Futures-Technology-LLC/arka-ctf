@@ -4,7 +4,6 @@ use anchor_lang::prelude::*;
 use anchor_lang::InstructionData;
 use anchor_spl::token::TokenAccount;
 use anchor_spl::token::ID as OLD_TOKEN_PROGRAM_ID;
-use anchor_spl::token_2022::ID as TOKEN_PROGRAM_ID;
 use solana_program_test::*;
 use solana_sdk::hash::Hash;
 use solana_sdk::program_pack::Pack;
@@ -284,68 +283,6 @@ async fn initialize_event(
     bank_client.process_transaction(transaction).await.unwrap();
 }
 
-async fn create_mints(
-    bank_client: &mut BanksClient,
-    payer: &Keypair,
-    event_id: u64,
-    program_id: &Pubkey,
-    recent_blockhash: Hash,
-    tick_size: u64,
-    mint_authority: &Pubkey,
-) {
-    let mut start = tick_size;
-
-    while start < ONE_DOLLAR {
-        let mut create_mints_ix = vec![];
-        for token_type in solana_ctf::TokenType::iterator() {
-            let data = solana_ctf::CreateMintParams {
-                event_id,
-                token_type: token_type.clone(),
-                token_price: start,
-                mint_authority: mint_authority.clone(),
-            };
-
-            let (mint_pda, _) = Pubkey::find_program_address(
-                &[
-                    b"eid_",
-                    data.event_id.to_le_bytes().as_ref(),
-                    b"_tt_",
-                    &[data.token_type.clone() as u8],
-                    b"_tp_",
-                    data.token_price.to_le_bytes().as_ref(),
-                ],
-                &program_id,
-            );
-
-            let event_account = solana_ctf::accounts::CreateMintData {
-                mint: mint_pda,
-                payer: payer.pubkey(),
-                rent: SYSVAR_RENT_PUBKEY,
-                system_program: system_program::id(),
-                token_program: TOKEN_PROGRAM_ID,
-            };
-            let ix = solana_ctf::instruction::CreateMint { params: data };
-
-            let create_mint_ix = Instruction {
-                program_id: program_id.clone(),
-                accounts: event_account.to_account_metas(None),
-                data: ix.data(),
-            };
-
-            create_mints_ix.push(create_mint_ix.clone());
-        }
-        let mut transaction = Transaction::new_with_payer(
-            &create_mints_ix,      // Include the instruction
-            Some(&payer.pubkey()), // Specify the fee payer
-        );
-
-        transaction.sign(&[&payer], recent_blockhash);
-
-        bank_client.process_transaction(transaction).await.unwrap();
-        start += tick_size;
-    }
-}
-
 async fn buy_token(
     bank_client: &mut BanksClient,
     payer: &Keypair,
@@ -550,17 +487,6 @@ async fn test_program() {
     )
     .await;
     get_usdc_account(&mut banks_client, &user2.user_usdc_ata).await;
-
-    create_mints(
-        &mut banks_client,
-        &payer,
-        1,
-        &program_id,
-        recent_blockhash,
-        100000,
-        &payer.pubkey(),
-    )
-    .await;
 
     buy_token(
         &mut banks_client,

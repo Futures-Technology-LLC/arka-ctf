@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, Mint as OldMint, Token as OldToken, TokenAccount as OldTokenAccount},
-    token_interface::{Mint, Token2022, TokenAccount},
+    token_interface::TokenAccount,
 };
 use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
@@ -127,16 +127,6 @@ pub mod solana_ctf {
             ctx.accounts.event_data.outcome
         );
 
-        Ok(())
-    }
-
-    pub fn create_mint(_ctx: Context<CreateMintData>, params: CreateMintParams) -> Result<()> {
-        msg!(
-            "Creating mint from event_id={:?}, token_type={:?}, token_price={:?}",
-            params.event_id,
-            params.token_type,
-            params.token_price
-        );
         Ok(())
     }
 
@@ -276,51 +266,12 @@ impl TokenType {
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
-pub struct CreateMintParams {
-    pub event_id: u64,
-    pub token_type: TokenType,
-    pub token_price: u64,
-    pub mint_authority: Pubkey,
-}
-
-#[derive(Accounts)]
-#[instruction(params: CreateMintParams)]
-pub struct CreateMintData<'info> {
-    // constant 8 in space denotes the size of the discriminator
-    #[account(
-        init,
-        payer = payer,
-        seeds = [b"eid_", params.event_id.to_le_bytes().as_ref(), b"_tt_", &[params.token_type.clone() as u8], b"_tp_", params.token_price.to_le_bytes().as_ref()],
-        bump,
-        mint::decimals = 0,
-        mint::authority = mint,
-        extensions::close_authority::authority = payer,
-    )]
-    pub mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub rent: Sysvar<'info, Rent>,
-    pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
-}
-
 #[derive(Accounts)]
 pub struct UpdateOutcome<'info> {
     #[account(mut)]
     pub event_data: Account<'info, EventData>,
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
-}
-
-#[error_code]
-pub enum InitEventError {
-    #[msg("Only 100 mints are supported as of now.")]
-    MintPdaLimitExceeded,
-    #[msg("Mint PDA vector len mismatch.")]
-    MalformedPdaVector,
-    #[msg("Price must be between 0 to 100")]
-    InvalidPrice,
 }
 
 #[error_code]
