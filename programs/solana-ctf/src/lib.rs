@@ -138,6 +138,26 @@ pub mod solana_ctf {
         Ok(())
     }
 
+    pub fn close_user_event_data(
+        ctx: Context<CloseUserEventAccount>,
+        params: CloseUserEventAccountParams,
+    ) -> Result<()> {
+        let user_account = &ctx.accounts.user_event_data;
+        for token_type in solana_ctf::TokenType::iterator() {
+            let qty = user_account.total_qty[token_type.clone() as usize];
+            if qty > 0 {
+                msg!("Pending qty={:?} token_type={:?}", qty, token_type);
+                return Err(CloseUserEventError::PendingQuantity.into());
+            }
+        }
+        msg!(
+            "Successfully close user_account_id={:?} event_id={:?}",
+            params.user_id,
+            params.event_id
+        );
+        Ok(())
+    }
+
     pub fn sell_tokens(ctx: Context<SellTokens>, params: SellTokenParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let token_type = params.token_type as usize;
@@ -479,6 +499,32 @@ pub struct CloseEventAccount<'info> {
         close = payer,
     )]
     pub event_data: Account<'info, EventData>,
+    #[account(signer)]
+    pub payer: Signer<'info>,
+}
+
+#[error_code]
+pub enum CloseUserEventError {
+    #[msg("User has not liquidated all his position.")]
+    PendingQuantity,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
+pub struct CloseUserEventAccountParams {
+    pub event_id: u64,
+    pub user_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: CloseUserEventAccountParams)]
+pub struct CloseUserEventAccount<'info> {
+    #[account(
+        mut,
+        seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
+        bump,
+        close = payer,
+    )]
+    pub user_event_data: Account<'info, UserEventData>,
     #[account(signer)]
     pub payer: Signer<'info>,
 }
