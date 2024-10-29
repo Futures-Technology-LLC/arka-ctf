@@ -182,6 +182,14 @@ pub mod solana_ctf {
             ctx.accounts.user_arka_event_account.avg_purchase_price[token_type];
         let total_qty = ctx.accounts.user_arka_event_account.total_qty[token_type];
 
+        if ctx.accounts.event_data.is_outcome_set
+            && ctx.accounts.event_data.outcome == EventOutcome::Void
+        {
+            if params.selling_price != avg_purchase_price {
+                return Err(SellTokenError::EventOutcomeMismatch.into());
+            }
+        }
+
         assert!(total_qty >= params.quantity);
 
         let purchase_price = avg_purchase_price * params.quantity;
@@ -316,6 +324,7 @@ pub enum EventOutcome {
     Null = 0,
     Yes,
     No,
+    Void,
 }
 
 impl From<u8> for EventOutcome {
