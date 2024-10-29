@@ -7,7 +7,7 @@ use anchor_spl::{
 use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
 
-declare_id!("EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA");
+declare_id!("EEvREcEYzAV31rNmw2QGJHQw54Gbc39vov2fbfCFf7PF");
 
 #[program]
 pub mod solana_ctf {
