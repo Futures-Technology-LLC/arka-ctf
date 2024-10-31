@@ -45,26 +45,26 @@ pub mod solana_ctf {
         /* Mint Arka token into user account */
         let quantity = params.quantity;
         let order_price = params.order_price;
-        let token_type = params.token_type.clone() as usize;
+        let order_type = params.order_type.clone() as usize;
         let user_event_account = &mut ctx.accounts.user_arka_event_account;
 
         let current_quantity = user_event_account.total_qty;
         let current_price = user_event_account.avg_purchase_price;
 
-        let new_price = ((current_price[token_type] * current_quantity[token_type])
+        let new_price = ((current_price[order_type] * current_quantity[order_type])
             + (order_price * quantity))
-            / (current_quantity[token_type] + quantity);
+            / (current_quantity[order_type] + quantity);
 
-        user_event_account.avg_purchase_price[token_type] = new_price;
-        user_event_account.total_qty[token_type] += quantity;
+        user_event_account.avg_purchase_price[order_type] = new_price;
+        user_event_account.total_qty[order_type] += quantity;
         user_event_account.comission = params.commission;
 
         msg!(
             "Previous avg_price={:?} qty={:?}, New avg_price={:?} qty={:?}",
-            current_price[token_type],
-            current_quantity[token_type],
+            current_price[order_type],
+            current_quantity[order_type],
             new_price,
-            user_event_account.total_qty[token_type],
+            user_event_account.total_qty[order_type],
         );
 
         Ok(())
@@ -143,10 +143,10 @@ pub mod solana_ctf {
         params: CloseUserEventAccountParams,
     ) -> Result<()> {
         let user_account = &ctx.accounts.user_event_data;
-        for token_type in solana_ctf::TokenType::iterator() {
-            let qty = user_account.total_qty[token_type.clone() as usize];
+        for order_type in solana_ctf::OrderType::iterator() {
+            let qty = user_account.total_qty[order_type.clone() as usize];
             if qty > 0 {
-                msg!("Pending qty={:?} token_type={:?}", qty, token_type);
+                msg!("Pending qty={:?} order_type={:?}", qty, order_type);
                 return Err(CloseUserEventError::PendingQuantity.into());
             }
         }
@@ -160,7 +160,7 @@ pub mod solana_ctf {
 
     pub fn sell_order(ctx: Context<SellOrder>, params: SellOrderParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
-        let token_type = params.token_type as usize;
+        let order_type = params.order_type as usize;
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.order_price > event_total_price {
             return Err(SellOrderError::InvalidTokenPrice.into());
@@ -172,15 +172,15 @@ pub mod solana_ctf {
             }
 
             let outcome = ctx.accounts.event_data.outcome.clone() as u8 - 1;
-            if outcome != params.token_type as u8 {
+            if outcome != params.order_type as u8 {
                 return Err(SellOrderError::EventOutcomeMismatch.into());
             }
         }
 
         /* Credit the USDC from user account to Arka account */
         let avg_purchase_price =
-            ctx.accounts.user_arka_event_account.avg_purchase_price[token_type];
-        let total_qty = ctx.accounts.user_arka_event_account.total_qty[token_type];
+            ctx.accounts.user_arka_event_account.avg_purchase_price[order_type];
+        let total_qty = ctx.accounts.user_arka_event_account.total_qty[order_type];
 
         if ctx.accounts.event_data.is_outcome_set
             && ctx.accounts.event_data.outcome == EventOutcome::Void
@@ -250,10 +250,10 @@ pub mod solana_ctf {
         }
 
         /* Reduce Arka token quantity from user account */
-        ctx.accounts.user_arka_event_account.total_qty[token_type] -= params.quantity;
+        ctx.accounts.user_arka_event_account.total_qty[order_type] -= params.quantity;
         msg!(
             "Total quantiy available after this trade={:?}",
-            ctx.accounts.user_arka_event_account.total_qty[token_type]
+            ctx.accounts.user_arka_event_account.total_qty[order_type]
         );
 
         Ok(())
@@ -282,15 +282,15 @@ pub enum SellOrderError {
 #[derive(
     Debug, PartialEq, Eq, Clone, AnchorSerialize, AnchorDeserialize, serde::Deserialize, Copy,
 )]
-pub enum TokenType {
+pub enum OrderType {
     Yes = 0,
     No,
 }
 
-impl TokenType {
-    pub fn iterator() -> Iter<'static, TokenType> {
-        static TOKEN_TYPES: [TokenType; 2] = [TokenType::Yes, TokenType::No];
-        TOKEN_TYPES.iter()
+impl OrderType {
+    pub fn iterator() -> Iter<'static, OrderType> {
+        static ORDER_TYPES: [OrderType; 2] = [OrderType::Yes, OrderType::No];
+        ORDER_TYPES.iter()
     }
 }
 
@@ -396,7 +396,7 @@ pub struct InitializeEvent<'info> {
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct BuyOrderParams {
-    pub token_type: TokenType,
+    pub order_type: OrderType,
     pub order_price: u64,
     pub event_id: u64,
     pub quantity: u64,
@@ -450,7 +450,7 @@ pub struct BuyOrder<'info> {
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
 pub struct SellOrderParams {
-    pub token_type: TokenType,
+    pub order_type: OrderType,
     pub order_price: u64,
     pub event_id: u64,
     pub quantity: u64,
