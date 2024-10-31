@@ -297,7 +297,7 @@ async fn buy_token(
     user: &User,
     arka_usdc_ata: &Pubkey,
 ) {
-    let data = solana_ctf::BuyTokenParams {
+    let data = solana_ctf::BuyOrderParams {
         token_type,
         token_price,
         event_id,
@@ -317,7 +317,7 @@ async fn buy_token(
     let (user_arka_event_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
-    let accounts = solana_ctf::accounts::BuyTokens {
+    let accounts = solana_ctf::accounts::BuyOrder {
         user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
         arka_usdc_event_token_account: arka_usdc_ata.clone(),
@@ -330,7 +330,7 @@ async fn buy_token(
         event_data: event_data_pda,
     };
 
-    let ix = solana_ctf::instruction::BuyTokens { params: data };
+    let ix = solana_ctf::instruction::BuyOrder { params: data };
 
     let buy_token_ix = Instruction {
         program_id: program_id.clone(),

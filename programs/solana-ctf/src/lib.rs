@@ -13,11 +13,11 @@ declare_id!("EEvREcEYzAV31rNmw2QGJHQw54Gbc39vov2fbfCFf7PF");
 pub mod solana_ctf {
     use super::*;
 
-    pub fn buy_tokens(ctx: Context<BuyTokens>, params: BuyTokenParams) -> Result<()> {
+    pub fn buy_order(ctx: Context<BuyOrder>, params: BuyOrderParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.token_price > event_total_price {
-            return Err(BuyTokenError::InvalidPrice.into());
+            return Err(BuyOrderError::InvalidPrice.into());
         }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -261,7 +261,7 @@ pub mod solana_ctf {
 }
 
 #[error_code]
-pub enum BuyTokenError {
+pub enum BuyOrderError {
     #[msg("Price > 100")]
     InvalidPrice,
 }
@@ -395,7 +395,7 @@ pub struct InitializeEvent<'info> {
 
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
-pub struct BuyTokenParams {
+pub struct BuyOrderParams {
     pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
@@ -416,8 +416,8 @@ impl UserEventData {
 }
 
 #[derive(Accounts)]
-#[instruction(params: BuyTokenParams)]
-pub struct BuyTokens<'info> {
+#[instruction(params: BuyOrderParams)]
+pub struct BuyOrder<'info> {
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
