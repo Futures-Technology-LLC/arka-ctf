@@ -290,7 +290,7 @@ async fn buy_token(
     program_id: &Pubkey,
     recent_blockhash: Hash,
     mint_authority: &Pubkey,
-    token_type: solana_ctf::TokenType,
+    order_type: solana_ctf::OrderType,
     order_price: u64,
     user_id: u64,
     quantity: u64,
@@ -298,7 +298,7 @@ async fn buy_token(
     arka_usdc_ata: &Pubkey,
 ) {
     let data = solana_ctf::BuyOrderParams {
-        token_type,
+        order_type,
         order_price,
         event_id,
         quantity,
@@ -355,7 +355,7 @@ async fn sell_token(
     program_id: &Pubkey,
     recent_blockhash: Hash,
     mint_authority: &Pubkey,
-    token_type: solana_ctf::TokenType,
+    order_type: solana_ctf::OrderType,
     order_price: u64,
     user_id: u64,
     quantity: u64,
@@ -365,7 +365,7 @@ async fn sell_token(
     selling_price: u64,
 ) {
     let data = solana_ctf::SellOrderParams {
-        token_type,
+        order_type,
         order_price,
         event_id,
         quantity,
@@ -495,7 +495,7 @@ async fn test_program() {
         &program_id,
         recent_blockhash,
         &payer.pubkey(),
-        solana_ctf::TokenType::Yes,
+        solana_ctf::OrderType::Yes,
         300000,
         1,
         3,
@@ -514,7 +514,7 @@ async fn test_program() {
         &program_id,
         recent_blockhash,
         &payer.pubkey(),
-        solana_ctf::TokenType::Yes,
+        solana_ctf::OrderType::Yes,
         300000,
         1,
         2,
