@@ -16,7 +16,7 @@ pub mod solana_ctf {
     pub fn buy_order(ctx: Context<BuyOrder>, params: BuyOrderParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let event_total_price = ctx.accounts.event_data.event_total_price;
-        if params.token_price > event_total_price {
+        if params.order_price > event_total_price {
             return Err(BuyOrderError::InvalidPrice.into());
         }
 
@@ -25,7 +25,7 @@ pub mod solana_ctf {
         let signer_seeds = [&seeds[..]];
 
         /* Debit the USDC from user account to Arka account */
-        let usdc_amount = params.token_price * params.quantity;
+        let usdc_amount = params.order_price * params.quantity;
         msg!("Total amount of USDC to deduct: {:?}", usdc_amount);
 
         let cpi_accounts = token::Transfer {
@@ -44,7 +44,7 @@ pub mod solana_ctf {
 
         /* Mint Arka token into user account */
         let quantity = params.quantity;
-        let token_price = params.token_price;
+        let order_price = params.order_price;
         let token_type = params.token_type.clone() as usize;
         let user_event_account = &mut ctx.accounts.user_arka_event_account;
 
@@ -52,7 +52,7 @@ pub mod solana_ctf {
         let current_price = user_event_account.avg_purchase_price;
 
         let new_price = ((current_price[token_type] * current_quantity[token_type])
-            + (token_price * quantity))
+            + (order_price * quantity))
             / (current_quantity[token_type] + quantity);
 
         user_event_account.avg_purchase_price[token_type] = new_price;
@@ -162,7 +162,7 @@ pub mod solana_ctf {
         // Validate that the price is between (0-1 dollar)
         let token_type = params.token_type as usize;
         let event_total_price = ctx.accounts.event_data.event_total_price;
-        if params.token_price > event_total_price {
+        if params.order_price > event_total_price {
             return Err(SellOrderError::InvalidTokenPrice.into());
         }
 
@@ -397,7 +397,7 @@ pub struct InitializeEvent<'info> {
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct BuyOrderParams {
     pub token_type: TokenType,
-    pub token_price: u64,
+    pub order_price: u64,
     pub event_id: u64,
     pub quantity: u64,
     pub user_id: u64,
@@ -451,7 +451,7 @@ pub struct BuyOrder<'info> {
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
 pub struct SellOrderParams {
     pub token_type: TokenType,
-    pub token_price: u64,
+    pub order_price: u64,
     pub event_id: u64,
     pub quantity: u64,
     pub user_id: u64,
