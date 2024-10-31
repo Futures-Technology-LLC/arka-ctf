@@ -291,7 +291,7 @@ async fn buy_token(
     recent_blockhash: Hash,
     mint_authority: &Pubkey,
     token_type: solana_ctf::TokenType,
-    token_price: u64,
+    order_price: u64,
     user_id: u64,
     quantity: u64,
     user: &User,
@@ -299,7 +299,7 @@ async fn buy_token(
 ) {
     let data = solana_ctf::BuyOrderParams {
         token_type,
-        token_price,
+        order_price,
         event_id,
         quantity,
         user_id,
@@ -356,7 +356,7 @@ async fn sell_token(
     recent_blockhash: Hash,
     mint_authority: &Pubkey,
     token_type: solana_ctf::TokenType,
-    token_price: u64,
+    order_price: u64,
     user_id: u64,
     quantity: u64,
     user: &User,
@@ -366,7 +366,7 @@ async fn sell_token(
 ) {
     let data = solana_ctf::SellOrderParams {
         token_type,
-        token_price,
+        order_price,
         event_id,
         quantity,
         user_id,
