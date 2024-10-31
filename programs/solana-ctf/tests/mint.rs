@@ -364,7 +364,7 @@ async fn sell_token(
     arka_usdc_ata: &Pubkey,
     selling_price: u64,
 ) {
-    let data = solana_ctf::SellTokenParams {
+    let data = solana_ctf::SellOrderParams {
         token_type,
         token_price,
         event_id,
@@ -385,7 +385,7 @@ async fn sell_token(
     let (delegate_account, _) =
         Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
 
-    let accounts = solana_ctf::accounts::SellTokens {
+    let accounts = solana_ctf::accounts::SellOrder {
         user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
         arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
@@ -399,7 +399,7 @@ async fn sell_token(
         event_data: event_data_pda,
     };
 
-    let ix = solana_ctf::instruction::SellTokens { params: data };
+    let ix = solana_ctf::instruction::SellOrder { params: data };
 
     let buy_token_ix = Instruction {
         program_id: program_id.clone(),

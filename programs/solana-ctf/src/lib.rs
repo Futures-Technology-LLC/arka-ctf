@@ -158,22 +158,22 @@ pub mod solana_ctf {
         Ok(())
     }
 
-    pub fn sell_tokens(ctx: Context<SellTokens>, params: SellTokenParams) -> Result<()> {
+    pub fn sell_order(ctx: Context<SellOrder>, params: SellOrderParams) -> Result<()> {
         // Validate that the price is between (0-1 dollar)
         let token_type = params.token_type as usize;
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.token_price > event_total_price {
-            return Err(SellTokenError::InvalidTokenPrice.into());
+            return Err(SellOrderError::InvalidTokenPrice.into());
         }
 
         if params.selling_price == event_total_price {
             if !ctx.accounts.event_data.is_outcome_set {
-                return Err(SellTokenError::EventNotFinished.into());
+                return Err(SellOrderError::EventNotFinished.into());
             }
 
             let outcome = ctx.accounts.event_data.outcome.clone() as u8 - 1;
             if outcome != params.token_type as u8 {
-                return Err(SellTokenError::EventOutcomeMismatch.into());
+                return Err(SellOrderError::EventOutcomeMismatch.into());
             }
         }
 
@@ -186,7 +186,7 @@ pub mod solana_ctf {
             && ctx.accounts.event_data.outcome == EventOutcome::Void
         {
             if params.selling_price != avg_purchase_price {
-                return Err(SellTokenError::EventOutcomeMismatch.into());
+                return Err(SellOrderError::EventOutcomeMismatch.into());
             }
         }
 
@@ -267,7 +267,7 @@ pub enum BuyOrderError {
 }
 
 #[error_code]
-pub enum SellTokenError {
+pub enum SellOrderError {
     #[msg("Price > 100")]
     InvalidTokenPrice,
     #[msg("Price > 100")]
@@ -449,7 +449,7 @@ pub struct BuyOrder<'info> {
 
 // Token initialization params
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
-pub struct SellTokenParams {
+pub struct SellOrderParams {
     pub token_type: TokenType,
     pub token_price: u64,
     pub event_id: u64,
@@ -459,8 +459,8 @@ pub struct SellTokenParams {
 }
 
 #[derive(Accounts)]
-#[instruction(params: SellTokenParams)]
-pub struct SellTokens<'info> {
+#[instruction(params: SellOrderParams)]
+pub struct SellOrder<'info> {
     #[account(
         mut,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
