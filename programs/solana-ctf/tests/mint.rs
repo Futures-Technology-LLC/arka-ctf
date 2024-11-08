@@ -283,6 +283,139 @@ async fn initialize_event(
     bank_client.process_transaction(transaction).await.unwrap();
 }
 
+async fn initialize_user(
+    bank_client: &mut BanksClient,
+    payer: &Keypair,
+    user_id: u64,
+    program_id: &Pubkey,
+    recent_blockhash: Hash,
+    usdc_mint: &UsdcMint,
+) {
+    let data = solana_ctf::InitUserAtaParams { user_id };
+    let user_id = data.user_id.to_le_bytes();
+
+    let (escrow_pda, _) =
+        Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+
+    let event_account = solana_ctf::accounts::InitializeUserAta {
+        payer: payer.pubkey(),
+        rent: SYSVAR_RENT_PUBKEY,
+        system_program: system_program::id(),
+        token_program: OLD_TOKEN_PROGRAM_ID,
+        associated_token_program: spl_associated_token_account::id(),
+        usdc_mint: usdc_mint.mint.pubkey(),
+        escrow_account: escrow_pda,
+        delegate: escrow_pda,
+    };
+    let ix = solana_ctf::instruction::InitializeUserAta { data };
+
+    let create_user_ix = Instruction {
+        program_id: program_id.clone(),
+        accounts: event_account.to_account_metas(None),
+        data: ix.data(),
+    };
+
+    let mut transaction = Transaction::new_with_payer(
+        &[create_user_ix],     // Include the instruction
+        Some(&payer.pubkey()), // Specify the fee payer
+    );
+
+    transaction.sign(&[&payer], recent_blockhash);
+
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
+async fn transfer_from_user_wallet_to_pda(
+    bank_client: &mut BanksClient,
+    payer: &Keypair,
+    user_id: u64,
+    user: &User,
+    amount: u64,
+    program_id: &Pubkey,
+    recent_blockhash: Hash,
+    usdc_mint: &UsdcMint,
+) {
+    let data = solana_ctf::TranferFromUserWalletParams { user_id, amount };
+    let user_id = data.user_id.to_le_bytes();
+
+    let (escrow_pda, _) =
+        Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
+
+    let event_account = solana_ctf::accounts::TranferFromUserWallet {
+        payer: payer.pubkey(),
+        rent: SYSVAR_RENT_PUBKEY,
+        system_program: system_program::id(),
+        token_program: OLD_TOKEN_PROGRAM_ID,
+        associated_token_program: spl_associated_token_account::id(),
+        usdc_mint: usdc_mint.mint.pubkey(),
+        escrow_account: escrow_pda,
+        delegate: delegate_account,
+        user_usdc_token_account: user.user_usdc_ata.clone(),
+    };
+    let ix = solana_ctf::instruction::TransferFromUserWalletToPda { data };
+
+    let create_user_ix = Instruction {
+        program_id: program_id.clone(),
+        accounts: event_account.to_account_metas(None),
+        data: ix.data(),
+    };
+
+    let mut transaction = Transaction::new_with_payer(
+        &[create_user_ix],     // Include the instruction
+        Some(&payer.pubkey()), // Specify the fee payer
+    );
+
+    transaction.sign(&[&payer], recent_blockhash);
+
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
+async fn transfer_from_user_pda_to_wallet(
+    bank_client: &mut BanksClient,
+    payer: &Keypair,
+    user_id: u64,
+    user: &User,
+    amount: u64,
+    program_id: &Pubkey,
+    recent_blockhash: Hash,
+    usdc_mint: &UsdcMint,
+) {
+    let data = solana_ctf::TranferFromUserPdaParams { user_id, amount };
+    let user_id = data.user_id.to_le_bytes();
+
+    let (escrow_pda, _) =
+        Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+
+    let event_account = solana_ctf::accounts::TranferFromUserPda {
+        payer: payer.pubkey(),
+        rent: SYSVAR_RENT_PUBKEY,
+        system_program: system_program::id(),
+        token_program: OLD_TOKEN_PROGRAM_ID,
+        associated_token_program: spl_associated_token_account::id(),
+        usdc_mint: usdc_mint.mint.pubkey(),
+        escrow_account: escrow_pda,
+        delegate: escrow_pda,
+        user_usdc_token_account: user.user_usdc_ata.clone(),
+    };
+    let ix = solana_ctf::instruction::TransferFromUserPdaToWallet { data };
+
+    let create_user_ix = Instruction {
+        program_id: program_id.clone(),
+        accounts: event_account.to_account_metas(None),
+        data: ix.data(),
+    };
+
+    let mut transaction = Transaction::new_with_payer(
+        &[create_user_ix],     // Include the instruction
+        Some(&payer.pubkey()), // Specify the fee payer
+    );
+
+    transaction.sign(&[&payer], recent_blockhash);
+
+    bank_client.process_transaction(transaction).await.unwrap();
+}
+
 async fn buy_token(
     bank_client: &mut BanksClient,
     payer: &Keypair,
@@ -315,11 +448,12 @@ async fn buy_token(
     let user_seed = &[b"uid_", uid.as_ref(), b"_eid_", eid.as_ref()];
 
     let (user_arka_event_account_pda, _) = Pubkey::find_program_address(user_seed, &program_id);
-    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
+    let (delegate_account, _) =
+        Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
 
     let accounts = solana_ctf::accounts::BuyOrder {
         user_arka_event_account: user_arka_event_account_pda,
-        user_usdc_token_account: user.user_usdc_ata.clone(),
+        user_usdc_token_account: delegate_account,
         arka_usdc_event_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
@@ -385,9 +519,12 @@ async fn sell_token(
     let (delegate_account, _) =
         Pubkey::find_program_address(&[b"usdc_eid_", eid.as_ref()], &program_id);
 
+    let (user_usdc_token_account, _) =
+        Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
+
     let accounts = solana_ctf::accounts::SellOrder {
         user_arka_event_account: user_arka_event_account_pda,
-        user_usdc_token_account: user.user_usdc_ata.clone(),
+        user_usdc_token_account,
         arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
         arka_usdc_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
@@ -427,6 +564,7 @@ async fn test_program() {
     println!("USDC mint pubkey={:?}", usdc_mint.mint.pubkey());
 
     let event_id: u64 = 1;
+    let user_id: u64 = 1;
     let event_id_bytes = event_id.to_le_bytes();
 
     initialize_event(
@@ -435,6 +573,16 @@ async fn test_program() {
         event_id,
         10,
         1000_000,
+        &program_id,
+        recent_blockhash,
+        &usdc_mint,
+    )
+    .await;
+
+    initialize_user(
+        &mut banks_client,
+        &payer,
+        user_id,
         &program_id,
         recent_blockhash,
         &usdc_mint,
@@ -487,6 +635,18 @@ async fn test_program() {
     )
     .await;
     get_usdc_account(&mut banks_client, &user2.user_usdc_ata).await;
+
+    transfer_from_user_wallet_to_pda(
+        &mut banks_client,
+        &payer,
+        user_id,
+        &user1,
+        300000 * 3,
+        &program_id,
+        recent_blockhash,
+        &usdc_mint,
+    )
+    .await;
 
     buy_token(
         &mut banks_client,
