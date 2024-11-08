@@ -21,7 +21,8 @@ pub mod solana_ctf {
         }
 
         let bump = ctx.bumps.delegate.to_be_bytes();
-        let seeds = &[b"money", bump.as_ref()];
+        let user_id = params.user_id.to_le_bytes();
+        let seeds = &[b"usdc_uid_", user_id.as_ref(), bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
         /* Debit the USDC from user account to Arka account */
@@ -66,6 +67,96 @@ pub mod solana_ctf {
             new_price,
             user_event_account.total_qty[order_type],
         );
+
+        Ok(())
+    }
+
+    pub fn transfer_from_user_wallet_to_pda(
+        ctx: Context<TranferFromUserWallet>,
+        data: TranferFromUserWalletParams,
+    ) -> Result<()> {
+        msg!(
+            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}",
+            data.user_id,
+            data.amount
+        );
+
+        let bump = ctx.bumps.delegate.to_be_bytes();
+        let seeds = &[b"money", bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        let cpi_accounts = token::Transfer {
+            from: ctx.accounts.user_usdc_token_account.to_account_info(),
+            to: ctx.accounts.escrow_account.to_account_info(),
+            authority: ctx.accounts.delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, data.amount)?;
+
+        Ok(())
+    }
+
+    pub fn transfer_from_user_pda_to_wallet(
+        ctx: Context<TranferFromUserPda>,
+        data: TranferFromUserPdaParams,
+    ) -> Result<()> {
+        msg!(
+            "Releasing funds from user pda to user wallet for user_id={:?}, amount={:?}",
+            data.user_id,
+            data.amount
+        );
+
+        let bump = ctx.bumps.delegate.to_be_bytes();
+        let user_id = data.user_id.to_le_bytes();
+        let seeds = &[b"usdc_uid_", user_id.as_ref(), bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        let cpi_accounts = token::Transfer {
+            to: ctx.accounts.user_usdc_token_account.to_account_info(),
+            from: ctx.accounts.escrow_account.to_account_info(),
+            authority: ctx.accounts.delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, data.amount)?;
+
+        Ok(())
+    }
+
+    pub fn initialize_user_ata(
+        ctx: Context<InitializeUserAta>,
+        data: InitUserAtaParams,
+    ) -> Result<()> {
+        msg!("User ata created for user_id={:?}", data.user_id,);
+
+        let bump = ctx.bumps.escrow_account.to_be_bytes();
+        let user_id_bytes = data.user_id.to_le_bytes();
+        let seeds = &[b"usdc_uid_", user_id_bytes.as_ref(), bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        token::set_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::SetAuthority {
+                    account_or_mint: ctx.accounts.escrow_account.to_account_info(),
+                    current_authority: ctx.accounts.delegate.to_account_info(),
+                },
+                &signer_seeds,
+            ),
+            AuthorityType::AccountOwner,
+            Some(ctx.accounts.delegate.key()), // Set the PDA as the new owner
+        )?;
 
         Ok(())
     }
@@ -357,6 +448,99 @@ pub enum InitializeEventError {
     InvalidCommissionRate,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct InitUserAtaParams {
+    pub user_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: InitUserAtaParams)]
+pub struct InitializeUserAta<'info> {
+    pub usdc_mint: Account<'info, OldMint>,
+    #[account(
+        init,
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = usdc_mint,
+        token::authority = delegate,
+    )]
+    pub escrow_account: Account<'info, OldTokenAccount>,
+    #[account(
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    pub delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, OldToken>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct TranferFromUserWalletParams {
+    pub user_id: u64,
+    pub amount: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: TranferFromUserWalletParams)]
+pub struct TranferFromUserWallet<'info> {
+    pub usdc_mint: Account<'info, OldMint>,
+    #[account(mut)]
+    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub escrow_account: Account<'info, OldTokenAccount>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    #[account(seeds = [b"money"], bump)]
+    pub delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, OldToken>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct TranferFromUserPdaParams {
+    pub user_id: u64,
+    pub amount: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: TranferFromUserPdaParams)]
+pub struct TranferFromUserPda<'info> {
+    pub usdc_mint: Account<'info, OldMint>,
+    #[account(mut)]
+    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub escrow_account: Account<'info, OldTokenAccount>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    #[account(
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, OldToken>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+}
+
 #[derive(Accounts)]
 #[instruction(params: InitEventParams)]
 pub struct InitializeEvent<'info> {
@@ -426,7 +610,11 @@ pub struct BuyOrder<'info> {
         space = 8 + UserEventData::LEN,
     )]
     pub user_arka_event_account: Account<'info, UserEventData>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
@@ -442,7 +630,10 @@ pub struct BuyOrder<'info> {
     #[account(signer)]
     pub authority: Signer<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
-    #[account(seeds = [b"money"], bump)]
+    #[account(
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
     pub delegate: AccountInfo<'info>,
     pub event_data: Account<'info, EventData>,
 }
@@ -467,7 +658,11 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub user_arka_event_account: Account<'info, UserEventData>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
