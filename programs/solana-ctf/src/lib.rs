@@ -658,11 +658,6 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub user_arka_event_account: Account<'info, UserEventData>,
-    #[account(
-        mut,
-        seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
-        bump,
-    )]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
