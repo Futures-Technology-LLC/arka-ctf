@@ -658,6 +658,7 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub user_arka_event_account: Account<'info, UserEventData>,
+    #[account(mut)]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
