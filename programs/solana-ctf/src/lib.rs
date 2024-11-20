@@ -162,21 +162,15 @@ pub mod solana_ctf {
     }
 
     pub fn initialize_event(ctx: Context<InitializeEvent>, data: InitEventParams) -> Result<()> {
-        if data.commission_rate > 100 {
-            return Err(InitializeEventError::InvalidCommissionRate.into());
-        }
-
-        ctx.accounts.event_data.comission_rate = data.commission_rate;
         ctx.accounts.event_data.event_id = data.event_id;
         ctx.accounts.event_data.outcome = EventOutcome::Null;
         ctx.accounts.event_data.is_outcome_set = false;
         ctx.accounts.event_data.event_total_price = data.event_total_price;
 
         msg!(
-            "Event created on chain with event_id={:?}, event_price={:?} and commission_rate={:?}",
+            "Event created on chain with event_id={:?}, event_price={:?}",
             data.event_id,
             data.event_total_price,
-            data.commission_rate
         );
 
         let bump = ctx.bumps.escrow_account.to_be_bytes();
@@ -403,7 +397,6 @@ pub enum UpdateOutcomeError {
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct InitEventParams {
     pub event_id: u64,
-    pub commission_rate: u64,
     pub event_total_price: u64,
 }
 
@@ -431,7 +424,6 @@ impl From<u8> for EventOutcome {
 #[account]
 pub struct EventData {
     pub event_id: u64,
-    pub comission_rate: u64,
     pub outcome: EventOutcome,
     pub is_outcome_set: bool,
     pub event_total_price: u64,
