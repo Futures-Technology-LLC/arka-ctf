@@ -333,7 +333,12 @@ async fn transfer_from_user_wallet_to_pda(
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
 ) {
-    let data = solana_ctf::TranferFromUserWalletParams { user_id, amount };
+    let data = solana_ctf::TranferFromUserWalletParams {
+        user_id,
+        amount,
+        event_id: 1,
+        order_id: 1,
+    };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =
@@ -379,7 +384,13 @@ async fn transfer_from_user_pda_to_wallet(
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
 ) {
-    let data = solana_ctf::TranferFromUserPdaParams { user_id, amount };
+    let data = solana_ctf::TranferFromUserPdaParams {
+        user_id,
+        amount,
+        event_id: 1,
+        order_id: 1,
+        utr_id: "test".to_string(),
+    };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =

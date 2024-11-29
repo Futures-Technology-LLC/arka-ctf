@@ -76,9 +76,11 @@ pub mod solana_ctf {
         data: TranferFromUserWalletParams,
     ) -> Result<()> {
         msg!(
-            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}",
+            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}",
             data.user_id,
-            data.amount
+            data.amount,
+            data.event_id,
+            data.order_id
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -107,9 +109,12 @@ pub mod solana_ctf {
         data: TranferFromUserPdaParams,
     ) -> Result<()> {
         msg!(
-            "Releasing funds from user pda to user wallet for user_id={:?}, amount={:?}",
+            "Releasing funds from user pda to user wallet for user_id={:?}, amount={:?} order_id={:?}, event_id={:?}, utr_id={:?}",
             data.user_id,
-            data.amount
+            data.amount,
+            data.order_id,
+            data.event_id,
+            data.utr_id
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -475,6 +480,8 @@ pub struct InitializeUserAta<'info> {
 pub struct TranferFromUserWalletParams {
     pub user_id: u64,
     pub amount: u64,
+    pub event_id: u64,
+    pub order_id: u64,
 }
 
 #[derive(Accounts)]
@@ -504,6 +511,9 @@ pub struct TranferFromUserWallet<'info> {
 pub struct TranferFromUserPdaParams {
     pub user_id: u64,
     pub amount: u64,
+    pub event_id: u64,
+    pub order_id: u64,
+    pub utr_id: String,
 }
 
 #[derive(Accounts)]
