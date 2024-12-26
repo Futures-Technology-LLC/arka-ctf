@@ -19,8 +19,31 @@ use spl_associated_token_account::get_associated_token_address;
 use spl_token::instruction::approve;
 use spl_token_2022::instruction::initialize_mint;
 use spl_token_2022::instruction::mint_to;
+use std::fs::File;
+use std::io::Read;
 
 pub const ONE_DOLLAR: u64 = 1_000_000;
+pub const OWNER: Pubkey = Pubkey::new_from_array([
+    148, 244, 35, 255, 110, 248, 40, 221, 236, 11, 199, 213, 242, 243, 97, 161, 22, 80, 148, 47,
+    144, 114, 254, 166, 91, 138, 193, 71, 72, 37, 36, 148,
+]);
+
+fn load_keypair_from_file(file_path: &str) -> Keypair {
+    // Read the JSON file
+    let mut file = File::open(file_path).unwrap();
+    let mut data = String::new();
+    file.read_to_string(&mut data).unwrap();
+
+    // Parse the JSON into a Vec<u8>
+    let keypair_vec: Vec<u8> = serde_json::from_str(&data).unwrap();
+
+    // Convert the Vec<u8> into a Keypair
+    let keypair = Keypair::from_bytes(&keypair_vec)
+        .map_err(|_| "Failed to create Keypair from the provided file")
+        .unwrap();
+
+    keypair
+}
 
 pub struct UsdcMint {
     pub mint: Keypair,
@@ -39,6 +62,7 @@ async fn close_event_account(
     recent_blockhash: Hash,
     program_id: &Pubkey,
     event_id: u64,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::CloseEventAccountParams { event_id };
     let event_id = event_id.to_le_bytes();
@@ -46,6 +70,7 @@ async fn close_event_account(
         Pubkey::find_program_address(&[b"eid_", event_id.as_ref()], program_id);
 
     let event_account = solana_ctf::accounts::CloseEventAccount {
+        owner: OWNER,
         event_data: event_data_pda,
         payer: payer.pubkey(),
     };
@@ -62,7 +87,7 @@ async fn close_event_account(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -240,6 +265,7 @@ async fn initialize_event(
     program_id: &Pubkey,
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::InitEventParams {
         event_id,
@@ -253,6 +279,7 @@ async fn initialize_event(
         Pubkey::find_program_address(&[b"usdc_eid_", event_id.as_ref()], program_id);
 
     let event_account = solana_ctf::accounts::InitializeEvent {
+        owner: OWNER,
         event_data: event_data_pda,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
@@ -276,7 +303,7 @@ async fn initialize_event(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -288,6 +315,7 @@ async fn initialize_user(
     program_id: &Pubkey,
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::InitUserAtaParams { user_id };
     let user_id = data.user_id.to_le_bytes();
@@ -296,6 +324,7 @@ async fn initialize_user(
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
 
     let event_account = solana_ctf::accounts::InitializeUserAta {
+        owner: OWNER,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -318,7 +347,7 @@ async fn initialize_user(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -332,6 +361,7 @@ async fn transfer_from_user_wallet_to_pda(
     program_id: &Pubkey,
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::TranferFromUserWalletParams {
         user_id,
@@ -346,6 +376,7 @@ async fn transfer_from_user_wallet_to_pda(
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
     let event_account = solana_ctf::accounts::TranferFromUserWallet {
+        owner: OWNER,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -369,7 +400,7 @@ async fn transfer_from_user_wallet_to_pda(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -397,6 +428,7 @@ async fn transfer_from_user_pda_to_wallet(
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
 
     let event_account = solana_ctf::accounts::TranferFromUserPda {
+        owner: OWNER,
         payer: payer.pubkey(),
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
@@ -431,13 +463,12 @@ async fn buy_token(
     event_id: u64,
     program_id: &Pubkey,
     recent_blockhash: Hash,
-    mint_authority: &Pubkey,
     order_type: solana_ctf::OrderType,
     order_price: u64,
     user_id: u64,
     quantity: u64,
-    user: &User,
     arka_usdc_ata: &Pubkey,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::BuyOrderParams {
         order_type,
@@ -461,6 +492,7 @@ async fn buy_token(
         Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
 
     let accounts = solana_ctf::accounts::BuyOrder {
+        owner: OWNER,
         user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account: delegate_account,
         arka_usdc_event_token_account: arka_usdc_ata.clone(),
@@ -468,7 +500,6 @@ async fn buy_token(
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
         old_token_program: OLD_TOKEN_PROGRAM_ID,
-        authority: mint_authority.clone(),
         delegate: delegate_account,
         event_data: event_data_pda,
     };
@@ -486,7 +517,7 @@ async fn buy_token(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -497,15 +528,14 @@ async fn sell_token(
     event_id: u64,
     program_id: &Pubkey,
     recent_blockhash: Hash,
-    mint_authority: &Pubkey,
     order_type: solana_ctf::OrderType,
     order_price: u64,
     user_id: u64,
     quantity: u64,
-    user: &User,
     arka_event_usdc_ata: &Pubkey,
     arka_usdc_ata: &Pubkey,
     selling_price: u64,
+    keypair: &Keypair,
 ) {
     let data = solana_ctf::SellOrderParams {
         order_type,
@@ -532,6 +562,7 @@ async fn sell_token(
         Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
 
     let accounts = solana_ctf::accounts::SellOrder {
+        owner: OWNER,
         user_arka_event_account: user_arka_event_account_pda,
         user_usdc_token_account,
         arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
@@ -540,7 +571,6 @@ async fn sell_token(
         rent: SYSVAR_RENT_PUBKEY,
         system_program: system_program::id(),
         old_token_program: OLD_TOKEN_PROGRAM_ID,
-        authority: mint_authority.clone(),
         delegate: delegate_account,
         event_data: event_data_pda,
     };
@@ -558,7 +588,7 @@ async fn sell_token(
         Some(&payer.pubkey()), // Specify the fee payer
     );
 
-    transaction.sign(&[&payer], recent_blockhash);
+    transaction.sign(&[&payer, keypair], recent_blockhash);
 
     bank_client.process_transaction(transaction).await.unwrap();
 }
@@ -569,6 +599,8 @@ async fn test_program() {
     let program_test = ProgramTest::new("solana_ctf", program_id, None);
     let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
     let usdc_mint = create_usdc_mint(&mut banks_client, &payer, recent_blockhash).await;
+    let keypair_file = "/Users/jinankjain/dev/arka-ctf/mainnet-owner.json"; // Path to your keypair JSON file
+    let keypair = load_keypair_from_file(keypair_file);
 
     println!("USDC mint pubkey={:?}", usdc_mint.mint.pubkey());
 
@@ -584,6 +616,7 @@ async fn test_program() {
         &program_id,
         recent_blockhash,
         &usdc_mint,
+        &keypair,
     )
     .await;
 
@@ -594,6 +627,7 @@ async fn test_program() {
         &program_id,
         recent_blockhash,
         &usdc_mint,
+        &keypair,
     )
     .await;
 
@@ -653,6 +687,7 @@ async fn test_program() {
         &program_id,
         recent_blockhash,
         &usdc_mint,
+        &keypair,
     )
     .await;
 
@@ -662,13 +697,12 @@ async fn test_program() {
         1,
         &program_id,
         recent_blockhash,
-        &payer.pubkey(),
         solana_ctf::OrderType::Yes,
         300000,
         1,
         3,
-        &user1,
         &arka_event_usdc_account_ata,
+        &keypair,
     )
     .await;
 
@@ -681,15 +715,14 @@ async fn test_program() {
         1,
         &program_id,
         recent_blockhash,
-        &payer.pubkey(),
         solana_ctf::OrderType::Yes,
         300000,
         1,
         2,
-        &user1,
         &arka_event_usdc_account_ata,
         &arka_usdc_account.user_usdc_ata,
         500000,
+        &keypair,
     )
     .await;
 
@@ -704,7 +737,15 @@ async fn test_program() {
 
     println!("Balance before closing {:?}", balance);
 
-    close_event_account(&mut banks_client, &payer, recent_blockhash, &program_id, 1).await;
+    close_event_account(
+        &mut banks_client,
+        &payer,
+        recent_blockhash,
+        &program_id,
+        1,
+        &keypair,
+    )
+    .await;
 
     let balance = banks_client
         .get_balance(payer.pubkey().clone())
