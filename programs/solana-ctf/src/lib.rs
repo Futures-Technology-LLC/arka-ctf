@@ -7,6 +7,11 @@ use anchor_spl::{
 use spl_token::instruction::AuthorityType;
 use std::slice::Iter;
 
+pub const OWNER: Pubkey = Pubkey::new_from_array([
+    148, 244, 35, 255, 110, 248, 40, 221, 236, 11, 199, 213, 242, 243, 97, 161, 22, 80, 148, 47,
+    144, 114, 254, 166, 91, 138, 193, 71, 72, 37, 36, 148,
+]);
+
 declare_id!("EEvREcEYzAV31rNmw2QGJHQw54Gbc39vov2fbfCFf7PF");
 
 #[program]
@@ -14,6 +19,11 @@ pub mod solana_ctf {
     use super::*;
 
     pub fn buy_order(ctx: Context<BuyOrder>, params: BuyOrderParams) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(BuyOrderError::Unauthorized));
+        }
+
         // Validate that the price is between (0-1 dollar)
         let event_total_price = ctx.accounts.event_data.event_total_price;
         if params.order_price > event_total_price {
@@ -75,6 +85,11 @@ pub mod solana_ctf {
         ctx: Context<TranferFromUserWallet>,
         data: TranferFromUserWalletParams,
     ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(TranferFromUserWalletError::Unauthorized));
+        }
+
         msg!(
             "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}",
             data.user_id,
@@ -108,6 +123,11 @@ pub mod solana_ctf {
         ctx: Context<TranferFromUserPda>,
         data: TranferFromUserPdaParams,
     ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(TranferFromUserPdaError::Unauthorized));
+        }
+
         msg!(
             "Releasing funds from user pda to user wallet for user_id={:?}, amount={:?} order_id={:?}, event_id={:?}, utr_id={:?}",
             data.user_id,
@@ -143,6 +163,11 @@ pub mod solana_ctf {
         ctx: Context<InitializeUserAta>,
         data: InitUserAtaParams,
     ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(InitializeUserAtaError::Unauthorized));
+        }
+
         msg!("User ata created for user_id={:?}", data.user_id,);
 
         let bump = ctx.bumps.escrow_account.to_be_bytes();
@@ -167,6 +192,11 @@ pub mod solana_ctf {
     }
 
     pub fn initialize_event(ctx: Context<InitializeEvent>, data: InitEventParams) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(InitializeEventError::Unauthorized));
+        }
+
         ctx.accounts.event_data.event_id = data.event_id;
         ctx.accounts.event_data.outcome = EventOutcome::Null;
         ctx.accounts.event_data.is_outcome_set = false;
@@ -200,6 +230,11 @@ pub mod solana_ctf {
     }
 
     pub fn update_outcome(ctx: Context<UpdateOutcome>, data: EventOutcome) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(UpdateOutcomeError::Unauthorized));
+        }
+
         if data == EventOutcome::Null {
             return Err(UpdateOutcomeError::InvalidOutcomeState.into());
         }
@@ -221,9 +256,14 @@ pub mod solana_ctf {
     }
 
     pub fn close_event_data(
-        _ctx: Context<CloseEventAccount>,
+        ctx: Context<CloseEventAccount>,
         params: CloseEventAccountParams,
     ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(CloseEventAccountError::Unauthorized));
+        }
+
         msg!("Closing event account with event_id={:?}", params.event_id);
         Ok(())
     }
@@ -232,6 +272,11 @@ pub mod solana_ctf {
         ctx: Context<CloseUserEventAccount>,
         params: CloseUserEventAccountParams,
     ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(CloseUserEventError::Unauthorized));
+        }
+
         let user_account = &ctx.accounts.user_event_data;
         for order_type in solana_ctf::OrderType::iterator() {
             let qty = user_account.total_qty[order_type.clone() as usize];
@@ -249,6 +294,11 @@ pub mod solana_ctf {
     }
 
     pub fn sell_order(ctx: Context<SellOrder>, params: SellOrderParams) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(SellOrderError::Unauthorized));
+        }
+
         // Validate that the price is between (0-1 dollar)
         let order_type = params.order_type as usize;
         let event_total_price = ctx.accounts.event_data.event_total_price;
@@ -353,6 +403,38 @@ pub mod solana_ctf {
 pub enum BuyOrderError {
     #[msg("Price > 100")]
     InvalidPrice,
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
+}
+
+#[error_code]
+pub enum TranferFromUserWalletError {
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
+}
+
+#[error_code]
+pub enum TranferFromUserPdaError {
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
+}
+
+#[error_code]
+pub enum InitializeUserAtaError {
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
+}
+
+#[error_code]
+pub enum CloseEventDataError {
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
+}
+
+#[error_code]
+pub enum CloseEventAccountError {
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
 }
 
 #[error_code]
@@ -365,6 +447,8 @@ pub enum SellOrderError {
     EventNotFinished,
     #[msg("Event outcome does not match price!")]
     EventOutcomeMismatch,
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
 }
 
 #[repr(u8)]
@@ -385,9 +469,13 @@ impl OrderType {
 
 #[derive(Accounts)]
 pub struct UpdateOutcome<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     #[account(mut)]
     pub event_data: Account<'info, EventData>,
-    pub user: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -397,6 +485,8 @@ pub enum UpdateOutcomeError {
     InvalidOutcomeState,
     #[msg("You are only allowed to update once.")]
     OutcomeAlreadyUpdated,
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
@@ -442,6 +532,8 @@ impl EventData {
 pub enum InitializeEventError {
     #[msg("Trying to set commission rate > 100")]
     InvalidCommissionRate,
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
@@ -452,6 +544,9 @@ pub struct InitUserAtaParams {
 #[derive(Accounts)]
 #[instruction(params: InitUserAtaParams)]
 pub struct InitializeUserAta<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     pub usdc_mint: Account<'info, OldMint>,
     #[account(
         init,
@@ -487,6 +582,9 @@ pub struct TranferFromUserWalletParams {
 #[derive(Accounts)]
 #[instruction(params: TranferFromUserWalletParams)]
 pub struct TranferFromUserWallet<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     pub usdc_mint: Account<'info, OldMint>,
     #[account(mut)]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -519,6 +617,9 @@ pub struct TranferFromUserPdaParams {
 #[derive(Accounts)]
 #[instruction(params: TranferFromUserPdaParams)]
 pub struct TranferFromUserPda<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     pub usdc_mint: Account<'info, OldMint>,
     #[account(mut)]
     pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -545,6 +646,9 @@ pub struct TranferFromUserPda<'info> {
 #[derive(Accounts)]
 #[instruction(params: InitEventParams)]
 pub struct InitializeEvent<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     // constant 8 in space denotes the size of the discriminator
     #[account(
         init,
@@ -603,6 +707,9 @@ impl UserEventData {
 #[derive(Accounts)]
 #[instruction(params: BuyOrderParams)]
 pub struct BuyOrder<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     #[account(
         init_if_needed,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
@@ -628,8 +735,6 @@ pub struct BuyOrder<'info> {
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
     pub old_token_program: Program<'info, OldToken>,
-    #[account(signer)]
-    pub authority: Signer<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
@@ -653,6 +758,9 @@ pub struct SellOrderParams {
 #[derive(Accounts)]
 #[instruction(params: SellOrderParams)]
 pub struct SellOrder<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     #[account(
         mut,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
@@ -680,8 +788,6 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub delegate: AccountInfo<'info>,
-    #[account(signer)]
-    pub authority: Signer<'info>,
     pub event_data: Account<'info, EventData>,
 }
 
@@ -693,6 +799,9 @@ pub struct CloseEventAccountParams {
 #[derive(Accounts)]
 #[instruction(params: CloseEventAccountParams)]
 pub struct CloseEventAccount<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     #[account(
         mut,
         seeds = [b"eid_", params.event_id.to_le_bytes().as_ref()],
@@ -708,6 +817,8 @@ pub struct CloseEventAccount<'info> {
 pub enum CloseUserEventError {
     #[msg("User has not liquidated all his position.")]
     PendingQuantity,
+    #[msg("Unauthorized: Only the owner can execute this instruction.")]
+    Unauthorized,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone, serde::Deserialize)]
@@ -719,6 +830,9 @@ pub struct CloseUserEventAccountParams {
 #[derive(Accounts)]
 #[instruction(params: CloseUserEventAccountParams)]
 pub struct CloseUserEventAccount<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
     #[account(
         mut,
         seeds = [b"uid_", params.user_id.to_le_bytes().as_ref(), b"_eid_", params.event_id.to_le_bytes().as_ref()],
