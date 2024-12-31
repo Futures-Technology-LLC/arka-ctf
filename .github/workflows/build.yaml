@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+          aws-region: ap-south-1 
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 
+          docker pull ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.ap-south-1.amazonaws.com
+
+      - name: Pull Docker image
+        run: |
+          docker pull ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest
+
+      - name: Create fee-pair.keyjson from GitHub secret
+        run: |
+          mkdir -p ./app
+          echo "${{ secrets.FEE_PAIR_KEY }}" > ./fee-payer-keypair.json
+          chmod 600 ./fee-payer-keypair.json
+
+           
+
+      - name: Run container and build
+        run: |
+          docker run --rm \
+            -v $(pwd):/root/app \
+            ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.ap-south-1.amazonaws.com/rust-ctf:latest \
+            bash -c "
+              # Configure Solana
+              source /root/.bashrc && \
+              cd /root/app && \  
+              solana config set --url https://api.devnet.solana.com && \
+              solana config set --keypair fee-payer-keypair.json && \
+              solana-keygen pubkey ./fee-payer-keypair.json && \
+              anchor build && \
+              solana program deploy target/deploy/solana_ctf.so --program-id EcVyZwmzssLbWBnnf7gSqVkZmc96iTNaYe4jQTrfHDLA
+            "
