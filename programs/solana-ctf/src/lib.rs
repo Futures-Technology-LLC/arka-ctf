@@ -511,6 +511,7 @@ impl From<u8> for EventOutcome {
             0 => EventOutcome::Null,
             1 => EventOutcome::Yes,
             2 => EventOutcome::No,
+            3 => EventOutcome::Void,
             _ => EventOutcome::Null, // Default case if value doesn't match
         }
     }
