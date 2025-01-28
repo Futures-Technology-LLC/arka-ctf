@@ -138,7 +138,7 @@ pub mod solana_ctf {
             &signer_seeds,
         );
 
-        token::transfer(cpi_context, data.amount)?;
+        token::transfer(cpi_context, data.promo_amount)?;
 
         Ok(())
     }
@@ -178,7 +178,7 @@ pub mod solana_ctf {
             &signer_seeds,
         );
 
-        token::transfer(cpi_context, data.amount)?;
+        token::transfer(cpi_context, data.amount - data.promo_amount)?;
 
         let cpi_accounts = token::Transfer {
             to: ctx.accounts.promo_account.to_account_info(),
@@ -642,7 +642,7 @@ pub struct InitializeUserAta<'info> {
     /// CHECK: This account is safe since this is our owner account.
     #[account(signer)]
     pub owner: Signer<'info>,
-    pub usdc_mint: Account<'info, OldMint>,
+    pub usdc_mint: Box<Account<'info, OldMint>>,
     #[account(
         init,
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
