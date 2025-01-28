@@ -180,6 +180,20 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, data.amount)?;
 
+        let cpi_accounts = token::Transfer {
+            to: ctx.accounts.promo_account.to_account_info(),
+            from: ctx.accounts.escrow_account.to_account_info(),
+            authority: ctx.accounts.delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, data.promo_amount)?;
+
         Ok(())
     }
 
@@ -709,6 +723,7 @@ pub struct TranferFromUserPdaParams {
     pub event_id: u64,
     pub order_id: u64,
     pub utr_id: String,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -732,6 +747,12 @@ pub struct TranferFromUserPda<'info> {
         bump,
     )]
     pub delegate: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Box<Account<'info, OldTokenAccount>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
