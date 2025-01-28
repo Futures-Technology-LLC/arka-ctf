@@ -384,11 +384,14 @@ async fn transfer_from_user_wallet_to_pda(
         amount,
         event_id: 1,
         order_id: 1,
+        promo_amount: 20000,
     };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+    let (promo_pda, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", user_id.as_ref()], program_id);
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
     let event_account = solana_ctf::accounts::TranferFromUserWallet {
@@ -402,6 +405,8 @@ async fn transfer_from_user_wallet_to_pda(
         escrow_account: escrow_pda,
         delegate: delegate_account,
         user_usdc_token_account: user.user_usdc_ata.clone(),
+        promo_account: promo_pda,
+        promo_delegate: promo_pda,
     };
     let ix = solana_ctf::instruction::TransferFromUserWalletToPda { data };
 

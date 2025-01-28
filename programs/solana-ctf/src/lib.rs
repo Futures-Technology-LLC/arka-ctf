@@ -91,11 +91,12 @@ pub mod solana_ctf {
         }
 
         msg!(
-            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}",
+            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}, promo_amount={:?}",
             data.user_id,
             data.amount,
             data.event_id,
-            data.order_id
+            data.order_id,
+            data.promo_amount
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -106,6 +107,29 @@ pub mod solana_ctf {
             from: ctx.accounts.user_usdc_token_account.to_account_info(),
             to: ctx.accounts.escrow_account.to_account_info(),
             authority: ctx.accounts.delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, data.amount)?;
+
+        let promo_bump = ctx.bumps.promo_delegate.to_be_bytes();
+        let user_id_bytes = data.user_id.to_le_bytes();
+        let promo_seeds = &[
+            b"promo_usdc_uid_",
+            user_id_bytes.as_ref(),
+            promo_bump.as_ref(),
+        ];
+        let signer_seeds = [&promo_seeds[..]];
+
+        let cpi_accounts = token::Transfer {
+            from: ctx.accounts.promo_account.to_account_info(),
+            to: ctx.accounts.escrow_account.to_account_info(),
+            authority: ctx.accounts.promo_delegate.to_account_info(),
         };
 
         let cpi_context = CpiContext::new_with_signer(
@@ -640,6 +664,7 @@ pub struct TranferFromUserWalletParams {
     pub amount: u64,
     pub event_id: u64,
     pub order_id: u64,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -656,10 +681,19 @@ pub struct TranferFromUserWallet<'info> {
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub escrow_account: Account<'info, OldTokenAccount>,
+    pub escrow_account: Box<Account<'info, OldTokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Box<Account<'info, OldTokenAccount>>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(seeds = [b"money"], bump)]
     pub delegate: AccountInfo<'info>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the promo account
+    #[account(seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()], bump)]
+    pub promo_delegate: AccountInfo<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
