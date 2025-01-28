@@ -569,6 +569,7 @@ async fn sell_token(
         quantity,
         user_id,
         selling_price,
+        promo_amount: 20000,
     };
 
     let event_id = data.event_id.to_le_bytes();
@@ -586,6 +587,9 @@ async fn sell_token(
     let (user_usdc_token_account, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
 
+    let (promo_account, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", uid.as_ref()], &program_id);
+
     let accounts = solana_ctf::accounts::SellOrder {
         owner: OWNER,
         user_arka_event_account: user_arka_event_account_pda,
@@ -598,6 +602,7 @@ async fn sell_token(
         old_token_program: OLD_TOKEN_PROGRAM_ID,
         delegate: delegate_account,
         event_data: event_data_pda,
+        promo_account,
     };
 
     let ix = solana_ctf::instruction::SellOrder { params: data };

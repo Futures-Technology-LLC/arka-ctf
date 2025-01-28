@@ -465,7 +465,21 @@ pub mod solana_ctf {
             &signer_seeds,
         );
 
-        token::transfer(cpi_context, amount_to_return)?;
+        token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
+
+        let cpi_accounts = token::Transfer {
+            to: ctx.accounts.promo_account.to_account_info(),
+            from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+            authority: ctx.accounts.delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.old_token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, params.promo_amount)?;
 
         /* Reduce Arka token quantity from user account */
         ctx.accounts.user_arka_event_account.total_qty[order_type] -= params.quantity;
@@ -871,6 +885,7 @@ pub struct SellOrderParams {
     pub quantity: u64,
     pub user_id: u64,
     pub selling_price: u64,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -893,6 +908,12 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub arka_usdc_event_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
     pub arka_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, signer)]
