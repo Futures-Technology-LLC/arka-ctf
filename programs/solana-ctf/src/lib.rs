@@ -117,28 +117,30 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, data.amount)?;
 
-        let promo_bump = ctx.bumps.promo_delegate.to_be_bytes();
-        let user_id_bytes = data.user_id.to_le_bytes();
-        let promo_seeds = &[
-            b"promo_usdc_uid_",
-            user_id_bytes.as_ref(),
-            promo_bump.as_ref(),
-        ];
-        let signer_seeds = [&promo_seeds[..]];
+        if data.promo_amount > 0 {
+            let promo_bump = ctx.bumps.promo_delegate.to_be_bytes();
+            let user_id_bytes = data.user_id.to_le_bytes();
+            let promo_seeds = &[
+                b"promo_usdc_uid_",
+                user_id_bytes.as_ref(),
+                promo_bump.as_ref(),
+            ];
+            let signer_seeds = [&promo_seeds[..]];
 
-        let cpi_accounts = token::Transfer {
-            from: ctx.accounts.promo_account.to_account_info(),
-            to: ctx.accounts.escrow_account.to_account_info(),
-            authority: ctx.accounts.promo_delegate.to_account_info(),
-        };
+            let cpi_accounts = token::Transfer {
+                from: ctx.accounts.promo_account.to_account_info(),
+                to: ctx.accounts.escrow_account.to_account_info(),
+                authority: ctx.accounts.promo_delegate.to_account_info(),
+            };
 
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
 
-        token::transfer(cpi_context, data.promo_amount)?;
+            token::transfer(cpi_context, data.promo_amount)?;
+        }
 
         Ok(())
     }
@@ -180,19 +182,21 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, data.amount - data.promo_amount)?;
 
-        let cpi_accounts = token::Transfer {
-            to: ctx.accounts.promo_account.to_account_info(),
-            from: ctx.accounts.escrow_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
+        if data.promo_amount > 0 {
+            let cpi_accounts = token::Transfer {
+                to: ctx.accounts.promo_account.to_account_info(),
+                from: ctx.accounts.escrow_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
 
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
 
-        token::transfer(cpi_context, data.promo_amount)?;
+            token::transfer(cpi_context, data.promo_amount)?;
+        }
 
         Ok(())
     }
@@ -426,10 +430,11 @@ pub mod solana_ctf {
         }
 
         msg!(
-            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?}",
+            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?} promo_amount: {:?}",
             purchase_price,
             selling_price,
             commission,
+            params.promo_amount,
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -467,19 +472,21 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
 
-        let cpi_accounts = token::Transfer {
-            to: ctx.accounts.promo_account.to_account_info(),
-            from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
+        if params.promo_amount > 0 {
+            let cpi_accounts = token::Transfer {
+                to: ctx.accounts.promo_account.to_account_info(),
+                from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
 
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.old_token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.old_token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
 
-        token::transfer(cpi_context, params.promo_amount)?;
+            token::transfer(cpi_context, params.promo_amount)?;
+        }
 
         /* Reduce Arka token quantity from user account */
         ctx.accounts.user_arka_event_account.total_qty[order_type] -= params.quantity;
