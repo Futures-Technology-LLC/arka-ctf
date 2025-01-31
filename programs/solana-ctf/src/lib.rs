@@ -117,29 +117,42 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, data.amount)?;
 
-        if data.promo_amount > 0 {
-            let promo_bump = ctx.bumps.promo_delegate.to_be_bytes();
-            let user_id_bytes = data.user_id.to_le_bytes();
-            let promo_seeds = &[
-                b"promo_usdc_uid_",
-                user_id_bytes.as_ref(),
-                promo_bump.as_ref(),
-            ];
-            let signer_seeds = [&promo_seeds[..]];
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            if data.promo_amount > 0 {
+                let promo_bump = ctx
+                    .bumps
+                    .promo_delegate
+                    .expect("Failed to get promo delegate")
+                    .to_be_bytes();
+                let user_id_bytes = data.user_id.to_le_bytes();
+                let promo_seeds = &[
+                    b"promo_usdc_uid_",
+                    user_id_bytes.as_ref(),
+                    promo_bump.as_ref(),
+                ];
+                let signer_seeds = [&promo_seeds[..]];
 
-            let cpi_accounts = token::Transfer {
-                from: ctx.accounts.promo_account.to_account_info(),
-                to: ctx.accounts.escrow_account.to_account_info(),
-                authority: ctx.accounts.promo_delegate.to_account_info(),
-            };
+                let cpi_accounts = token::Transfer {
+                    from: promo_account.to_account_info(),
+                    to: ctx.accounts.escrow_account.to_account_info(),
+                    authority: ctx
+                        .accounts
+                        .promo_delegate
+                        .clone()
+                        .expect("Failed to get promo delegate")
+                        .to_account_info(),
+                };
 
-            let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                &signer_seeds,
-            );
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
 
-            token::transfer(cpi_context, data.promo_amount)?;
+                token::transfer(cpi_context, data.promo_amount)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
         }
 
         Ok(())
@@ -182,20 +195,24 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, data.amount - data.promo_amount)?;
 
-        if data.promo_amount > 0 {
-            let cpi_accounts = token::Transfer {
-                to: ctx.accounts.promo_account.to_account_info(),
-                from: ctx.accounts.escrow_account.to_account_info(),
-                authority: ctx.accounts.delegate.to_account_info(),
-            };
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            if data.promo_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: promo_account.to_account_info(),
+                    from: ctx.accounts.escrow_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
 
-            let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                &signer_seeds,
-            );
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
 
-            token::transfer(cpi_context, data.promo_amount)?;
+                token::transfer(cpi_context, data.promo_amount)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
         }
 
         Ok(())
@@ -472,20 +489,24 @@ pub mod solana_ctf {
 
         token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
 
-        if params.promo_amount > 0 {
-            let cpi_accounts = token::Transfer {
-                to: ctx.accounts.promo_account.to_account_info(),
-                from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
-                authority: ctx.accounts.delegate.to_account_info(),
-            };
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            if params.promo_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: promo_account.to_account_info(),
+                    from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
 
-            let cpi_context = CpiContext::new_with_signer(
-                ctx.accounts.old_token_program.to_account_info(),
-                cpi_accounts,
-                &signer_seeds,
-            );
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.old_token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
 
-            token::transfer(cpi_context, params.promo_amount)?;
+                token::transfer(cpi_context, params.promo_amount)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
         }
 
         /* Reduce Arka token quantity from user account */
@@ -722,13 +743,13 @@ pub struct TranferFromUserWallet<'info> {
         seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub promo_account: Box<Account<'info, OldTokenAccount>>,
+    pub promo_account: Option<Box<Account<'info, OldTokenAccount>>>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(seeds = [b"money"], bump)]
     pub delegate: AccountInfo<'info>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the promo account
     #[account(seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()], bump)]
-    pub promo_delegate: AccountInfo<'info>,
+    pub promo_delegate: Option<AccountInfo<'info>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -773,7 +794,7 @@ pub struct TranferFromUserPda<'info> {
         seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub promo_account: Box<Account<'info, OldTokenAccount>>,
+    pub promo_account: Option<Box<Account<'info, OldTokenAccount>>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -920,7 +941,7 @@ pub struct SellOrder<'info> {
         seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub promo_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub promo_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
     #[account(mut)]
     pub arka_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, signer)]
