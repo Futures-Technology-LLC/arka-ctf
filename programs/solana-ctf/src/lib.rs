@@ -90,35 +90,25 @@ pub mod solana_ctf {
             return Err(error!(TranferFromUserWalletError::Unauthorized));
         }
 
-        msg!(
-            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}, promo_amount={:?}",
-            data.user_id,
-            data.amount,
-            data.event_id,
-            data.order_id,
-            data.promo_amount
-        );
-
-        let bump = ctx.bumps.delegate.to_be_bytes();
-        let seeds = &[b"money", bump.as_ref()];
-        let signer_seeds = [&seeds[..]];
-
-        let cpi_accounts = token::Transfer {
-            from: ctx.accounts.user_usdc_token_account.to_account_info(),
-            to: ctx.accounts.escrow_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
-
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
-
-        token::transfer(cpi_context, data.amount)?;
+        let mut amount_from_usdc_wallet = data.amount;
+        let mut amount_from_promo_wallet = 0_u64;
 
         if let Some(promo_account) = &ctx.accounts.promo_account {
-            if data.promo_amount > 0 {
+            let promo_balance = promo_account.amount;
+
+            amount_from_usdc_wallet = if data.amount > promo_balance {
+                data.amount - promo_balance
+            } else {
+                0_u64
+            };
+
+            amount_from_promo_wallet = if data.amount < promo_balance {
+                data.amount
+            } else {
+                promo_balance
+            };
+
+            if amount_from_promo_wallet > 0 {
                 let promo_bump = ctx
                     .bumps
                     .promo_delegate
@@ -149,11 +139,40 @@ pub mod solana_ctf {
                     &signer_seeds,
                 );
 
-                token::transfer(cpi_context, data.promo_amount)?;
+                token::transfer(cpi_context, amount_from_promo_wallet)?;
             }
         } else {
             msg!("Promo account was not passed to this contract!");
         }
+
+        if amount_from_usdc_wallet > 0 {
+            let bump = ctx.bumps.delegate.to_be_bytes();
+            let seeds = &[b"money", bump.as_ref()];
+            let signer_seeds = [&seeds[..]];
+
+            let cpi_accounts = token::Transfer {
+                from: ctx.accounts.user_usdc_token_account.to_account_info(),
+                to: ctx.accounts.escrow_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
+
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
+
+            token::transfer(cpi_context, amount_from_usdc_wallet)?;
+        }
+
+        msg!(
+            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}, promo_amount={:?}",
+            data.user_id,
+            amount_from_usdc_wallet,
+            data.event_id,
+            data.order_id,
+            amount_from_promo_wallet
+        );
 
         Ok(())
     }
@@ -532,6 +551,8 @@ pub enum BuyOrderError {
 pub enum TranferFromUserWalletError {
     #[msg("Unauthorized: Only the owner can execute this instruction.")]
     Unauthorized,
+    #[msg("Insufficient balance")]
+    InsufficientBalance,
 }
 
 #[error_code]
