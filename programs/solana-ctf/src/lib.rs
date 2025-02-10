@@ -412,6 +412,43 @@ pub mod solana_ctf {
         Ok(())
     }
 
+    pub fn initialize_promo_account(
+        ctx: Context<InitializePromoAccount>,
+        data: InitPromoAccount,
+    ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(InitializeUserAtaError::Unauthorized));
+        }
+
+        msg!("User promo ata created for user_id={:?}", data.user_id,);
+
+        let user_id_bytes = data.user_id.to_le_bytes();
+        /* Create promo account to store promo balance */
+        let promo_bump = ctx.bumps.promo_account.to_be_bytes();
+        let promo_seeds = &[
+            b"promo_usdc_uid_",
+            user_id_bytes.as_ref(),
+            promo_bump.as_ref(),
+        ];
+        let promo_signer_seeds = [&promo_seeds[..]];
+
+        token::set_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::SetAuthority {
+                    account_or_mint: ctx.accounts.promo_account.to_account_info(),
+                    current_authority: ctx.accounts.promo_delegate.to_account_info(),
+                },
+                &promo_signer_seeds,
+            ),
+            AuthorityType::AccountOwner,
+            Some(ctx.accounts.promo_delegate.key()), // Set the PDA as the new owner
+        )?;
+
+        Ok(())
+    }
+
     pub fn sell_order(ctx: Context<SellOrder>, params: SellOrderParams) -> Result<()> {
         // Verify if the signer is the owner
         if ctx.accounts.owner.key() != OWNER {
@@ -683,6 +720,41 @@ pub enum InitializeEventError {
 pub struct InitUserAtaParams {
     pub user_id: u64,
     pub promo_balance: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct InitPromoAccount {
+    pub user_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: InitUserAtaParams)]
+pub struct InitializePromoAccount<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
+    pub usdc_mint: Box<Account<'info, OldMint>>,
+    #[account(
+        init,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = usdc_mint,
+        token::authority = promo_delegate,
+    )]
+    pub promo_account: Box<Account<'info, OldTokenAccount>>,
+    #[account(
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    pub promo_delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, OldToken>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
