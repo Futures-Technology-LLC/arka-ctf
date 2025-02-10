@@ -316,13 +316,25 @@ async fn initialize_user(
     recent_blockhash: Hash,
     usdc_mint: &UsdcMint,
     keypair: &Keypair,
+    arka_usdc_ata: &Pubkey,
 ) {
-    let data = solana_ctf::InitUserAtaParams { user_id };
+    let data = solana_ctf::InitUserAtaParams {
+        user_id,
+        promo_balance: 2000000,
+    };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
 
+    let (promo_pda, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", user_id.as_ref()], program_id);
+    let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
+
+    println!(
+        "arka_usdc_ata: {:?} {:?} {:?}",
+        arka_usdc_ata, escrow_pda, promo_pda
+    );
     let event_account = solana_ctf::accounts::InitializeUserAta {
         owner: OWNER,
         payer: payer.pubkey(),
@@ -333,6 +345,10 @@ async fn initialize_user(
         usdc_mint: usdc_mint.mint.pubkey(),
         escrow_account: escrow_pda,
         delegate: escrow_pda,
+        promo_account: promo_pda,
+        promo_delegate: promo_pda,
+        arka_usdc_wallet: arka_usdc_ata.clone(),
+        arka_delegate: delegate_account,
     };
     let ix = solana_ctf::instruction::InitializeUserAta { data };
 
@@ -368,11 +384,14 @@ async fn transfer_from_user_wallet_to_pda(
         amount,
         event_id: 1,
         order_id: 1,
+        promo_amount: 20000,
     };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+    let (promo_pda, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", user_id.as_ref()], program_id);
     let (delegate_account, _) = Pubkey::find_program_address(&[b"money"], &program_id);
 
     let event_account = solana_ctf::accounts::TranferFromUserWallet {
@@ -386,6 +405,8 @@ async fn transfer_from_user_wallet_to_pda(
         escrow_account: escrow_pda,
         delegate: delegate_account,
         user_usdc_token_account: user.user_usdc_ata.clone(),
+        promo_account: Some(promo_pda),
+        promo_delegate: Some(promo_pda),
     };
     let ix = solana_ctf::instruction::TransferFromUserWalletToPda { data };
 
@@ -421,11 +442,14 @@ async fn transfer_from_user_pda_to_wallet(
         event_id: 1,
         order_id: 1,
         utr_id: "test".to_string(),
+        promo_amount: 20000,
     };
     let user_id = data.user_id.to_le_bytes();
 
     let (escrow_pda, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", user_id.as_ref()], program_id);
+    let (promo_pda, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", user_id.as_ref()], program_id);
 
     let event_account = solana_ctf::accounts::TranferFromUserPda {
         owner: OWNER,
@@ -438,6 +462,7 @@ async fn transfer_from_user_pda_to_wallet(
         escrow_account: escrow_pda,
         delegate: escrow_pda,
         user_usdc_token_account: user.user_usdc_ata.clone(),
+        promo_account: Some(promo_pda),
     };
     let ix = solana_ctf::instruction::TransferFromUserPdaToWallet { data };
 
@@ -544,6 +569,7 @@ async fn sell_token(
         quantity,
         user_id,
         selling_price,
+        promo_amount: 20000,
     };
 
     let event_id = data.event_id.to_le_bytes();
@@ -561,6 +587,9 @@ async fn sell_token(
     let (user_usdc_token_account, _) =
         Pubkey::find_program_address(&[b"usdc_uid_", uid.as_ref()], &program_id);
 
+    let (promo_account, _) =
+        Pubkey::find_program_address(&[b"promo_usdc_uid_", uid.as_ref()], &program_id);
+
     let accounts = solana_ctf::accounts::SellOrder {
         owner: OWNER,
         user_arka_event_account: user_arka_event_account_pda,
@@ -573,6 +602,7 @@ async fn sell_token(
         old_token_program: OLD_TOKEN_PROGRAM_ID,
         delegate: delegate_account,
         event_data: event_data_pda,
+        promo_account: Some(promo_account),
     };
 
     let ix = solana_ctf::instruction::SellOrder { params: data };
@@ -620,6 +650,19 @@ async fn test_program() {
     )
     .await;
 
+    let arka_usdc_wallet =
+        create_user_and_mint_usdc(&mut banks_client, &usdc_mint, &payer, recent_blockhash).await;
+    get_approval(
+        &mut banks_client,
+        &program_id,
+        &payer,
+        &arka_usdc_wallet,
+        9000000,
+        recent_blockhash,
+    )
+    .await;
+    get_usdc_account(&mut banks_client, &arka_usdc_wallet.user_usdc_ata).await;
+
     initialize_user(
         &mut banks_client,
         &payer,
@@ -628,6 +671,7 @@ async fn test_program() {
         recent_blockhash,
         &usdc_mint,
         &keypair,
+        &arka_usdc_wallet.user_usdc_ata,
     )
     .await;
 
@@ -694,12 +738,12 @@ async fn test_program() {
     buy_token(
         &mut banks_client,
         &payer,
-        1,
+        event_id,
         &program_id,
         recent_blockhash,
         solana_ctf::OrderType::Yes,
         300000,
-        1,
+        user_id,
         3,
         &arka_event_usdc_account_ata,
         &keypair,
@@ -712,12 +756,12 @@ async fn test_program() {
     sell_token(
         &mut banks_client,
         &payer,
-        1,
+        event_id,
         &program_id,
         recent_blockhash,
         solana_ctf::OrderType::Yes,
         300000,
-        1,
+        user_id,
         2,
         &arka_event_usdc_account_ata,
         &arka_usdc_account.user_usdc_ata,
@@ -742,7 +786,7 @@ async fn test_program() {
         &payer,
         recent_blockhash,
         &program_id,
-        1,
+        event_id,
         &keypair,
     )
     .await;

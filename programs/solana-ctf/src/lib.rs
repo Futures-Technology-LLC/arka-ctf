@@ -90,31 +90,89 @@ pub mod solana_ctf {
             return Err(error!(TranferFromUserWalletError::Unauthorized));
         }
 
+        let mut amount_from_usdc_wallet = data.amount;
+        let mut amount_from_promo_wallet = 0_u64;
+
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            let promo_balance = promo_account.amount;
+
+            amount_from_usdc_wallet = if data.amount > promo_balance {
+                data.amount - promo_balance
+            } else {
+                0_u64
+            };
+
+            amount_from_promo_wallet = if data.amount < promo_balance {
+                data.amount
+            } else {
+                promo_balance
+            };
+
+            if amount_from_promo_wallet > 0 {
+                let promo_bump = ctx
+                    .bumps
+                    .promo_delegate
+                    .expect("Failed to get promo delegate")
+                    .to_be_bytes();
+                let user_id_bytes = data.user_id.to_le_bytes();
+                let promo_seeds = &[
+                    b"promo_usdc_uid_",
+                    user_id_bytes.as_ref(),
+                    promo_bump.as_ref(),
+                ];
+                let signer_seeds = [&promo_seeds[..]];
+
+                let cpi_accounts = token::Transfer {
+                    from: promo_account.to_account_info(),
+                    to: ctx.accounts.escrow_account.to_account_info(),
+                    authority: ctx
+                        .accounts
+                        .promo_delegate
+                        .clone()
+                        .expect("Failed to get promo delegate")
+                        .to_account_info(),
+                };
+
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
+
+                token::transfer(cpi_context, amount_from_promo_wallet)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
+        }
+
+        if amount_from_usdc_wallet > 0 {
+            let bump = ctx.bumps.delegate.to_be_bytes();
+            let seeds = &[b"money", bump.as_ref()];
+            let signer_seeds = [&seeds[..]];
+
+            let cpi_accounts = token::Transfer {
+                from: ctx.accounts.user_usdc_token_account.to_account_info(),
+                to: ctx.accounts.escrow_account.to_account_info(),
+                authority: ctx.accounts.delegate.to_account_info(),
+            };
+
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
+
+            token::transfer(cpi_context, amount_from_usdc_wallet)?;
+        }
+
         msg!(
-            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}",
+            "Locking funds from user wallet to user pda for user_id={:?}, amount={:?}, event_id={:?}, order_id={:?}, promo_amount={:?}",
             data.user_id,
-            data.amount,
+            amount_from_usdc_wallet,
             data.event_id,
-            data.order_id
+            data.order_id,
+            amount_from_promo_wallet
         );
-
-        let bump = ctx.bumps.delegate.to_be_bytes();
-        let seeds = &[b"money", bump.as_ref()];
-        let signer_seeds = [&seeds[..]];
-
-        let cpi_accounts = token::Transfer {
-            from: ctx.accounts.user_usdc_token_account.to_account_info(),
-            to: ctx.accounts.escrow_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
-
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
-
-        token::transfer(cpi_context, data.amount)?;
 
         Ok(())
     }
@@ -154,7 +212,27 @@ pub mod solana_ctf {
             &signer_seeds,
         );
 
-        token::transfer(cpi_context, data.amount)?;
+        token::transfer(cpi_context, data.amount - data.promo_amount)?;
+
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            if data.promo_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: promo_account.to_account_info(),
+                    from: ctx.accounts.escrow_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
+
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
+
+                token::transfer(cpi_context, data.promo_amount)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
+        }
 
         Ok(())
     }
@@ -170,6 +248,7 @@ pub mod solana_ctf {
 
         msg!("User ata created for user_id={:?}", data.user_id,);
 
+        /* Create escrow account for storing order-init balance */
         let bump = ctx.bumps.escrow_account.to_be_bytes();
         let user_id_bytes = data.user_id.to_le_bytes();
         let seeds = &[b"usdc_uid_", user_id_bytes.as_ref(), bump.as_ref()];
@@ -187,6 +266,46 @@ pub mod solana_ctf {
             AuthorityType::AccountOwner,
             Some(ctx.accounts.delegate.key()), // Set the PDA as the new owner
         )?;
+
+        /* Create promo account to store promo balance */
+        let promo_bump = ctx.bumps.promo_account.to_be_bytes();
+        let promo_seeds = &[
+            b"promo_usdc_uid_",
+            user_id_bytes.as_ref(),
+            promo_bump.as_ref(),
+        ];
+        let promo_signer_seeds = [&promo_seeds[..]];
+
+        token::set_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::SetAuthority {
+                    account_or_mint: ctx.accounts.promo_account.to_account_info(),
+                    current_authority: ctx.accounts.promo_delegate.to_account_info(),
+                },
+                &promo_signer_seeds,
+            ),
+            AuthorityType::AccountOwner,
+            Some(ctx.accounts.promo_delegate.key()), // Set the PDA as the new owner
+        )?;
+
+        let bump = ctx.bumps.arka_delegate.to_be_bytes();
+        let seeds = &[b"money", bump.as_ref()];
+        let signer_seeds = [&seeds[..]];
+
+        let cpi_accounts = token::Transfer {
+            from: ctx.accounts.arka_usdc_wallet.to_account_info(),
+            to: ctx.accounts.promo_account.to_account_info(),
+            authority: ctx.accounts.arka_delegate.to_account_info(),
+        };
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            &signer_seeds,
+        );
+
+        token::transfer(cpi_context, data.promo_balance)?;
 
         Ok(())
     }
@@ -293,6 +412,43 @@ pub mod solana_ctf {
         Ok(())
     }
 
+    pub fn initialize_promo_account(
+        ctx: Context<InitializePromoAccount>,
+        data: InitPromoAccount,
+    ) -> Result<()> {
+        // Verify if the signer is the owner
+        if ctx.accounts.owner.key() != OWNER {
+            return Err(error!(InitializeUserAtaError::Unauthorized));
+        }
+
+        msg!("User promo ata created for user_id={:?}", data.user_id,);
+
+        let user_id_bytes = data.user_id.to_le_bytes();
+        /* Create promo account to store promo balance */
+        let promo_bump = ctx.bumps.promo_account.to_be_bytes();
+        let promo_seeds = &[
+            b"promo_usdc_uid_",
+            user_id_bytes.as_ref(),
+            promo_bump.as_ref(),
+        ];
+        let promo_signer_seeds = [&promo_seeds[..]];
+
+        token::set_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::SetAuthority {
+                    account_or_mint: ctx.accounts.promo_account.to_account_info(),
+                    current_authority: ctx.accounts.promo_delegate.to_account_info(),
+                },
+                &promo_signer_seeds,
+            ),
+            AuthorityType::AccountOwner,
+            Some(ctx.accounts.promo_delegate.key()), // Set the PDA as the new owner
+        )?;
+
+        Ok(())
+    }
+
     pub fn sell_order(ctx: Context<SellOrder>, params: SellOrderParams) -> Result<()> {
         // Verify if the signer is the owner
         if ctx.accounts.owner.key() != OWNER {
@@ -347,10 +503,11 @@ pub mod solana_ctf {
         }
 
         msg!(
-            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?}",
+            "Purchase price: {:?}, Selling Price: {:?}, commission: {:?} promo_amount: {:?}",
             purchase_price,
             selling_price,
             commission,
+            params.promo_amount,
         );
 
         let bump = ctx.bumps.delegate.to_be_bytes();
@@ -386,7 +543,27 @@ pub mod solana_ctf {
             &signer_seeds,
         );
 
-        token::transfer(cpi_context, amount_to_return)?;
+        token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
+
+        if let Some(promo_account) = &ctx.accounts.promo_account {
+            if params.promo_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: promo_account.to_account_info(),
+                    from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
+
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.old_token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
+
+                token::transfer(cpi_context, params.promo_amount)?;
+            }
+        } else {
+            msg!("Promo account was not passed to this contract!");
+        }
 
         /* Reduce Arka token quantity from user account */
         ctx.accounts.user_arka_event_account.total_qty[order_type] -= params.quantity;
@@ -411,6 +588,8 @@ pub enum BuyOrderError {
 pub enum TranferFromUserWalletError {
     #[msg("Unauthorized: Only the owner can execute this instruction.")]
     Unauthorized,
+    #[msg("Insufficient balance")]
+    InsufficientBalance,
 }
 
 #[error_code]
@@ -540,6 +719,42 @@ pub enum InitializeEventError {
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct InitUserAtaParams {
     pub user_id: u64,
+    pub promo_balance: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct InitPromoAccount {
+    pub user_id: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: InitUserAtaParams)]
+pub struct InitializePromoAccount<'info> {
+    /// CHECK: This account is safe since this is our owner account.
+    #[account(signer)]
+    pub owner: Signer<'info>,
+    pub usdc_mint: Box<Account<'info, OldMint>>,
+    #[account(
+        init,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = usdc_mint,
+        token::authority = promo_delegate,
+    )]
+    pub promo_account: Box<Account<'info, OldTokenAccount>>,
+    #[account(
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    pub promo_delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, OldToken>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
@@ -548,7 +763,7 @@ pub struct InitializeUserAta<'info> {
     /// CHECK: This account is safe since this is our owner account.
     #[account(signer)]
     pub owner: Signer<'info>,
-    pub usdc_mint: Account<'info, OldMint>,
+    pub usdc_mint: Box<Account<'info, OldMint>>,
     #[account(
         init,
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
@@ -557,13 +772,33 @@ pub struct InitializeUserAta<'info> {
         token::mint = usdc_mint,
         token::authority = delegate,
     )]
-    pub escrow_account: Account<'info, OldTokenAccount>,
+    pub escrow_account: Box<Account<'info, OldTokenAccount>>,
+    #[account(
+        init,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+        payer = payer,
+        token::mint = usdc_mint,
+        token::authority = promo_delegate,
+    )]
+    pub promo_account: Box<Account<'info, OldTokenAccount>>,
     #[account(
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     pub delegate: AccountInfo<'info>,
+    #[account(
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    pub promo_delegate: AccountInfo<'info>,
+    #[account(mut)]
+    pub arka_usdc_wallet: Box<Account<'info, OldTokenAccount>>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the token account
+    #[account(seeds = [b"money"], bump)]
+    pub arka_delegate: AccountInfo<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -578,6 +813,7 @@ pub struct TranferFromUserWalletParams {
     pub amount: u64,
     pub event_id: u64,
     pub order_id: u64,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -594,10 +830,19 @@ pub struct TranferFromUserWallet<'info> {
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub escrow_account: Account<'info, OldTokenAccount>,
+    pub escrow_account: Box<Account<'info, OldTokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Option<Box<Account<'info, OldTokenAccount>>>,
     /// CHECK: This account is safe as it is used to set the delegate authority for the token account
     #[account(seeds = [b"money"], bump)]
     pub delegate: AccountInfo<'info>,
+    /// CHECK: This account is safe as it is used to set the delegate authority for the promo account
+    #[account(seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()], bump)]
+    pub promo_delegate: Option<AccountInfo<'info>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -613,6 +858,7 @@ pub struct TranferFromUserPdaParams {
     pub event_id: u64,
     pub order_id: u64,
     pub utr_id: String,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -636,6 +882,12 @@ pub struct TranferFromUserPda<'info> {
         bump,
     )]
     pub delegate: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Option<Box<Account<'info, OldTokenAccount>>>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -754,6 +1006,7 @@ pub struct SellOrderParams {
     pub quantity: u64,
     pub user_id: u64,
     pub selling_price: u64,
+    pub promo_amount: u64,
 }
 
 #[derive(Accounts)]
@@ -776,6 +1029,12 @@ pub struct SellOrder<'info> {
         bump,
     )]
     pub arka_usdc_event_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"promo_usdc_uid_", params.user_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub promo_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
     #[account(mut)]
     pub arka_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, signer)]
