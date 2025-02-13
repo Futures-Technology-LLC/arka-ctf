@@ -404,7 +404,7 @@ async fn transfer_from_user_wallet_to_pda(
         usdc_mint: usdc_mint.mint.pubkey(),
         escrow_account: escrow_pda,
         delegate: delegate_account,
-        user_usdc_token_account: user.user_usdc_ata.clone(),
+        user_usdc_token_account: Some(user.user_usdc_ata.clone()),
         promo_account: Some(promo_pda),
         promo_delegate: Some(promo_pda),
     };
@@ -461,7 +461,7 @@ async fn transfer_from_user_pda_to_wallet(
         usdc_mint: usdc_mint.mint.pubkey(),
         escrow_account: escrow_pda,
         delegate: escrow_pda,
-        user_usdc_token_account: user.user_usdc_ata.clone(),
+        user_usdc_token_account: Some(user.user_usdc_ata.clone()),
         promo_account: Some(promo_pda),
     };
     let ix = solana_ctf::instruction::TransferFromUserPdaToWallet { data };
@@ -593,7 +593,7 @@ async fn sell_token(
     let accounts = solana_ctf::accounts::SellOrder {
         owner: OWNER,
         user_arka_event_account: user_arka_event_account_pda,
-        user_usdc_token_account,
+        user_usdc_token_account: Some(user_usdc_token_account),
         arka_usdc_event_token_account: arka_event_usdc_ata.clone(),
         arka_usdc_token_account: arka_usdc_ata.clone(),
         payer: payer.pubkey(),
