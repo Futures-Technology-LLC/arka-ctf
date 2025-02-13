@@ -404,7 +404,7 @@ async fn transfer_from_user_wallet_to_pda(
         usdc_mint: usdc_mint.mint.pubkey(),
         escrow_account: escrow_pda,
         delegate: delegate_account,
-        user_usdc_token_account: user.user_usdc_ata.clone(),
+        user_usdc_token_account: Some(user.user_usdc_ata.clone()),
         promo_account: Some(promo_pda),
         promo_delegate: Some(promo_pda),
     };
