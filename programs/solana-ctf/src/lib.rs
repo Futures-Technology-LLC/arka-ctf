@@ -107,42 +107,53 @@ pub mod solana_ctf {
             } else {
                 promo_balance
             };
-
-            if amount_from_promo_wallet > 0 {
-                let promo_bump = ctx
-                    .bumps
-                    .promo_delegate
-                    .expect("Failed to get promo delegate")
-                    .to_be_bytes();
-                let user_id_bytes = data.user_id.to_le_bytes();
-                let promo_seeds = &[
-                    b"promo_usdc_uid_",
-                    user_id_bytes.as_ref(),
-                    promo_bump.as_ref(),
-                ];
-                let signer_seeds = [&promo_seeds[..]];
-
-                let cpi_accounts = token::Transfer {
-                    from: promo_account.to_account_info(),
-                    to: ctx.accounts.escrow_account.to_account_info(),
-                    authority: ctx
-                        .accounts
-                        .promo_delegate
-                        .clone()
-                        .expect("Failed to get promo delegate")
-                        .to_account_info(),
-                };
-
-                let cpi_context = CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    cpi_accounts,
-                    &signer_seeds,
-                );
-
-                token::transfer(cpi_context, amount_from_promo_wallet)?;
-            }
         } else {
             msg!("Promo account was not passed to this contract!");
+        }
+
+        if amount_from_usdc_wallet > 0 {
+            if ctx.accounts.user_usdc_token_account.is_none() {
+                return Err(error!(TranferFromUserWalletError::InsufficientBalance));
+            }
+        }
+
+        if amount_from_promo_wallet > 0 {
+            let promo_bump = ctx
+                .bumps
+                .promo_delegate
+                .expect("Failed to get promo delegate")
+                .to_be_bytes();
+            let user_id_bytes = data.user_id.to_le_bytes();
+            let promo_seeds = &[
+                b"promo_usdc_uid_",
+                user_id_bytes.as_ref(),
+                promo_bump.as_ref(),
+            ];
+            let signer_seeds = [&promo_seeds[..]];
+
+            let cpi_accounts = token::Transfer {
+                from: ctx
+                    .accounts
+                    .promo_account
+                    .as_ref()
+                    .unwrap()
+                    .to_account_info(),
+                to: ctx.accounts.escrow_account.to_account_info(),
+                authority: ctx
+                    .accounts
+                    .promo_delegate
+                    .clone()
+                    .expect("Failed to get promo delegate")
+                    .to_account_info(),
+            };
+
+            let cpi_context = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                &signer_seeds,
+            );
+
+            token::transfer(cpi_context, amount_from_promo_wallet)?;
         }
 
         if amount_from_usdc_wallet > 0 {
@@ -151,7 +162,12 @@ pub mod solana_ctf {
             let signer_seeds = [&seeds[..]];
 
             let cpi_accounts = token::Transfer {
-                from: ctx.accounts.user_usdc_token_account.to_account_info(),
+                from: ctx
+                    .accounts
+                    .user_usdc_token_account
+                    .as_ref()
+                    .unwrap()
+                    .to_account_info(),
                 to: ctx.accounts.escrow_account.to_account_info(),
                 authority: ctx.accounts.delegate.to_account_info(),
             };
@@ -200,19 +216,27 @@ pub mod solana_ctf {
         let seeds = &[b"usdc_uid_", user_id.as_ref(), bump.as_ref()];
         let signer_seeds = [&seeds[..]];
 
-        let cpi_accounts = token::Transfer {
-            to: ctx.accounts.user_usdc_token_account.to_account_info(),
-            from: ctx.accounts.escrow_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
+        let usdc_account_amount = data.amount - data.promo_amount;
 
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
+        if let Some(usdc_account) = &ctx.accounts.user_usdc_token_account {
+            if usdc_account_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: usdc_account.to_account_info(),
+                    from: ctx.accounts.escrow_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
 
-        token::transfer(cpi_context, data.amount - data.promo_amount)?;
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
+
+                token::transfer(cpi_context, usdc_account_amount)?;
+            }
+        } else {
+            msg!("Usdc account does not exists!");
+        }
 
         if let Some(promo_account) = &ctx.accounts.promo_account {
             if data.promo_amount > 0 {
@@ -531,19 +555,23 @@ pub mod solana_ctf {
             token::transfer(cpi_context, commission)?;
         }
 
-        let cpi_accounts = token::Transfer {
-            to: ctx.accounts.user_usdc_token_account.to_account_info(),
-            from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
-            authority: ctx.accounts.delegate.to_account_info(),
-        };
+        if let Some(usdc_account) = &ctx.accounts.user_usdc_token_account {
+            if amount_to_return - params.promo_amount > 0 {
+                let cpi_accounts = token::Transfer {
+                    to: usdc_account.to_account_info(),
+                    from: ctx.accounts.arka_usdc_event_token_account.to_account_info(),
+                    authority: ctx.accounts.delegate.to_account_info(),
+                };
 
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.old_token_program.to_account_info(),
-            cpi_accounts,
-            &signer_seeds,
-        );
+                let cpi_context = CpiContext::new_with_signer(
+                    ctx.accounts.old_token_program.to_account_info(),
+                    cpi_accounts,
+                    &signer_seeds,
+                );
 
-        token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
+                token::transfer(cpi_context, amount_to_return - params.promo_amount)?;
+            }
+        }
 
         if let Some(promo_account) = &ctx.accounts.promo_account {
             if params.promo_amount > 0 {
@@ -824,7 +852,7 @@ pub struct TranferFromUserWallet<'info> {
     pub owner: Signer<'info>,
     pub usdc_mint: Account<'info, OldMint>,
     #[account(mut)]
-    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_usdc_token_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
     #[account(
         mut,
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
@@ -869,7 +897,7 @@ pub struct TranferFromUserPda<'info> {
     pub owner: Signer<'info>,
     pub usdc_mint: Account<'info, OldMint>,
     #[account(mut)]
-    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_usdc_token_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
     #[account(
         mut,
         seeds = [b"usdc_uid_", params.user_id.to_le_bytes().as_ref()],
@@ -1022,7 +1050,7 @@ pub struct SellOrder<'info> {
     )]
     pub user_arka_event_account: Account<'info, UserEventData>,
     #[account(mut)]
-    pub user_usdc_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_usdc_token_account: Option<Box<InterfaceAccount<'info, TokenAccount>>>,
     #[account(
         mut,
         seeds = [b"usdc_eid_", params.event_id.to_le_bytes().as_ref()],
